@@ -1,0 +1,55 @@
+{
+  "config": {
+    "features": "/home/sudaxin/projects/paired_data/data/derived/natview_rest_features_papertr_offset10p5.npz",
+    "target": "pca",
+    "n_components": 24,
+    "split_mode": "within_session_blocks",
+    "folds": 5,
+    "group_by": "subject",
+    "null": true
+  },
+  "models": {
+    "eeg_ridge_pca": {
+      "roi_corr_mean": 0.008800489197497373,
+      "roi_corr_median": 0.010749888851327067,
+      "roi_corr_positive_frac": 0.6140000000000001,
+      "spatial_corr_mean": -0.017480026873747435,
+      "spatial_corr_median": -0.019149848682625214,
+      "r2_uniform": -0.013925370713821637,
+      "r2_variance_weighted": -0.013735332819794749,
+      "retrieval_top1": 0.01751286648155861,
+      "retrieval_top5": 0.09051280315310302,
+      "retrieval_mrr": 0.0839179328104748,
+      "latent_corr_mean": -0.010464984497076757,
+      "pca_explained_variance": 0.8706741431394984
+    },
+    "shifted_null_pca": {
+      "roi_corr_mean": -0.023955926350026545,
+      "roi_corr_median": -0.024565864989705415,
+      "roi_corr_positive_frac": 0.22999999999999998,
+      "spatial_corr_mean": -0.015365295539582786,
+      "spatial_corr_median": -0.015351199202334392,
+      "r2_uniform": -0.009712082857257949,
+      "r2_variance_weighted": -0.009725650544837011,
+      "retrieval_top1": 0.01949726076293856,
+      "retrieval_top5": 0.095947702251884,
+      "retrieval_mrr": 0.0867368682048584,
+      "latent_corr_mean": -0.010619183671147213,
+      "pca_explained_variance": 0.8706741431394984
+    },
+    "train_mean": {
+      "roi_corr_mean": 1.2103312470309708e-18,
+      "roi_corr_median": 2.518875807870643e-18,
+      "roi_corr_positive_frac": 0.5439999999999999,
+      "spatial_corr_mean": -0.010544647037332247,
+      "spatial_corr_median": -0.007735382801299091,
+      "r2_uniform": -0.0002734034424935796,
+      "r2_variance_weighted": -0.00027301157814931204,
+      "retrieval_top1": 0.018836452203136927,
+      "retrieval_top5": 0.09418226101568465,
+      "retrieval_mrr": 0.08579989279499485,
+      "latent_corr_mean": NaN,
+      "pca_explained_variance": NaN
+    }
+  }
+}

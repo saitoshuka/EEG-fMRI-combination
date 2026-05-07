@@ -1,0 +1,53 @@
+{
+  "config": {
+    "features": "/home/sudaxin/projects/paired_data/data/derived/natview_smoke_features.npz",
+    "target": "pca",
+    "n_components": 4,
+    "folds": 2,
+    "null": true
+  },
+  "models": {
+    "eeg_ridge_pca": {
+      "roi_corr_mean": 0.04618815552366475,
+      "roi_corr_median": 0.04634533583970793,
+      "roi_corr_positive_frac": 0.94,
+      "spatial_corr_mean": 0.013632989796369885,
+      "spatial_corr_median": 0.016272021319256962,
+      "r2_uniform": -0.03707797772641294,
+      "r2_variance_weighted": -0.037077977726412935,
+      "retrieval_top1": 0.003961267605633803,
+      "retrieval_top5": 0.023767605633802816,
+      "retrieval_mrr": 0.02416080271744933,
+      "latent_corr_mean": 0.023680524665096084,
+      "pca_explained_variance": 0.6914540761229667
+    },
+    "shifted_null_pca": {
+      "roi_corr_mean": -0.0019812722065118415,
+      "roi_corr_median": -0.003214772590487582,
+      "roi_corr_positive_frac": 0.48500000000000004,
+      "spatial_corr_mean": -0.0019336125414456506,
+      "spatial_corr_median": 0.003983512128401321,
+      "r2_uniform": -0.05063478369196444,
+      "r2_variance_weighted": -0.05063478369196443,
+      "retrieval_top1": 0.004841549295774648,
+      "retrieval_top5": 0.018485915492957746,
+      "retrieval_mrr": 0.02299280811971382,
+      "latent_corr_mean": -0.0038123022741152948,
+      "pca_explained_variance": 0.6914540761229666
+    },
+    "train_mean": {
+      "roi_corr_mean": 1.0932210701257627e-19,
+      "roi_corr_median": 4.977299383400602e-19,
+      "roi_corr_positive_frac": 0.505,
+      "spatial_corr_mean": -0.00038110231371922944,
+      "spatial_corr_median": 0.005748482659194941,
+      "r2_uniform": -1.1102230246251566e-18,
+      "r2_variance_weighted": -1.110223024625157e-18,
+      "retrieval_top1": 0.0035211267605633804,
+      "retrieval_top5": 0.017605633802816902,
+      "retrieval_mrr": 0.021929399412851512,
+      "latent_corr_mean": NaN,
+      "pca_explained_variance": NaN
+    }
+  }
+}

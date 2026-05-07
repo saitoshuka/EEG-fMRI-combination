@@ -1,0 +1,55 @@
+{
+  "config": {
+    "features": "/home/sudaxin/projects/paired_data/data/derived/natview_rest_features_papertr_offset10p5.npz",
+    "target": "roi",
+    "n_components": 24,
+    "split_mode": "grouped",
+    "folds": 5,
+    "group_by": "session",
+    "null": true
+  },
+  "models": {
+    "eeg_ridge_roi": {
+      "roi_corr_mean": 0.017821005629034447,
+      "roi_corr_median": 0.019489273049455448,
+      "roi_corr_positive_frac": 0.8140000000000001,
+      "spatial_corr_mean": -0.0003001876220392177,
+      "spatial_corr_median": -0.0026020028331553203,
+      "r2_uniform": -0.007763561957127585,
+      "r2_variance_weighted": -0.007763561957127585,
+      "retrieval_top1": 0.002918157042476868,
+      "retrieval_top5": 0.019392705133106047,
+      "retrieval_mrr": 0.0227697039549949,
+      "latent_corr_mean": NaN,
+      "pca_explained_variance": NaN
+    },
+    "shifted_null_roi": {
+      "roi_corr_mean": 0.002183720617147289,
+      "roi_corr_median": 0.0016398720679423342,
+      "roi_corr_positive_frac": 0.578,
+      "spatial_corr_mean": 0.0011102566648239875,
+      "spatial_corr_median": 0.002768299183378028,
+      "r2_uniform": -0.006099776542044967,
+      "r2_variance_weighted": -0.0060997765420449665,
+      "retrieval_top1": 0.0032028456831886785,
+      "retrieval_top5": 0.019401988446477454,
+      "retrieval_mrr": 0.023047495658707954,
+      "latent_corr_mean": NaN,
+      "pca_explained_variance": NaN
+    },
+    "train_mean": {
+      "roi_corr_mean": -4.116614154182566e-20,
+      "roi_corr_median": 2.7738983849497933e-20,
+      "roi_corr_positive_frac": 0.488,
+      "spatial_corr_mean": 0.0004208973835234119,
+      "spatial_corr_median": 0.0013295344055816304,
+      "r2_uniform": 0.0,
+      "r2_variance_weighted": 0.0,
+      "retrieval_top1": 0.0037673886466687923,
+      "retrieval_top5": 0.018836943233343957,
+      "retrieval_mrr": 0.023195266454111414,
+      "latent_corr_mean": NaN,
+      "pca_explained_variance": NaN
+    }
+  }
+}

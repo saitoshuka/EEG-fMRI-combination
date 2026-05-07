@@ -1,0 +1,55 @@
+{
+  "config": {
+    "features": "/home/sudaxin/projects/paired_data/data/derived/natview_rest_features_papertr_offset10p5.npz",
+    "target": "pca",
+    "n_components": 24,
+    "split_mode": "grouped",
+    "folds": 5,
+    "group_by": "subject",
+    "null": true
+  },
+  "models": {
+    "eeg_ridge_pca": {
+      "roi_corr_mean": 0.009515808436490235,
+      "roi_corr_median": 0.011237326352755853,
+      "roi_corr_positive_frac": 0.624,
+      "spatial_corr_mean": -0.004629709080007031,
+      "spatial_corr_median": -0.003761335815191781,
+      "r2_uniform": -0.01979990403370791,
+      "r2_variance_weighted": -0.01979990403370791,
+      "retrieval_top1": 0.002926512981797652,
+      "retrieval_top5": 0.01884786688803506,
+      "retrieval_mrr": 0.022142946849332535,
+      "latent_corr_mean": -0.0014843849390712197,
+      "pca_explained_variance": 0.8717514092027765
+    },
+    "shifted_null_pca": {
+      "roi_corr_mean": -0.0032122070890032205,
+      "roi_corr_median": -0.004074696265976431,
+      "roi_corr_positive_frac": 0.48,
+      "spatial_corr_mean": -0.003929967734389653,
+      "spatial_corr_median": -0.004991557122921306,
+      "r2_uniform": -0.0017914490206770398,
+      "r2_variance_weighted": -0.0017914490206770394,
+      "retrieval_top1": 0.0035689994404507104,
+      "retrieval_top5": 0.017267882104631628,
+      "retrieval_mrr": 0.022770462431841554,
+      "latent_corr_mean": -0.0016096547845723705,
+      "pca_explained_variance": 0.8717514092027765
+    },
+    "train_mean": {
+      "roi_corr_mean": 2.2419812198389654e-20,
+      "roi_corr_median": 2.2064599272810403e-20,
+      "roi_corr_positive_frac": 0.49000000000000005,
+      "spatial_corr_mean": 0.0009895874444477795,
+      "spatial_corr_median": 0.0003155669694655573,
+      "r2_uniform": 0.0,
+      "r2_variance_weighted": 0.0,
+      "retrieval_top1": 0.0037687523939135617,
+      "retrieval_top5": 0.01884376196956781,
+      "retrieval_mrr": 0.023202251687548883,
+      "latent_corr_mean": NaN,
+      "pca_explained_variance": NaN
+    }
+  }
+}
