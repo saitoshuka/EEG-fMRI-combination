@@ -9,7 +9,10 @@ dependencies:
   - mne
   - numpy
   - pandas
+  - pip
   - pymatreader
   - scikit-learn
   - scipy
   - tqdm
+  - pip:
+      - torch
