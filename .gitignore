@@ -6,6 +6,9 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+# Third-party model repositories cloned locally.
+external/LaBraM/
+
 # Large local data and download state.
 downloads/paired_datasets/
 downloads/archives/
