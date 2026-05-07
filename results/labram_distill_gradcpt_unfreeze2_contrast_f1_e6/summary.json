@@ -1,0 +1,93 @@
+{
+  "config": {
+    "command": "eval",
+    "raw_cache_dir": "/home/sudaxin/projects/paired_data/data/pooled_raw_v1_fullsubj/run_cache",
+    "out_dir": "results/labram_distill_gradcpt_unfreeze2_contrast_f1_e6",
+    "checkpoint": "/home/sudaxin/projects/paired_data/external/LaBraM/checkpoints/labram-base.pth",
+    "include_dataset": [
+      "gradCPT_simultaneous_EEG_fMRI_DTI_OpenNeuro_ds006040"
+    ],
+    "device": "cuda",
+    "amp": true,
+    "folds": 3,
+    "max_folds": 1,
+    "epochs": 6,
+    "patience": 3,
+    "batch_size": 16,
+    "lr": 2e-05,
+    "weight_decay": 0.001,
+    "d_model": 128,
+    "heads": 4,
+    "layers": 1,
+    "dropout": 0.1,
+    "corr_weight": 0.05,
+    "contrastive_weight": 0.02,
+    "contrastive_temp": 0.07,
+    "contrastive_min_items": 4,
+    "grad_clip": 1.0,
+    "min_delta": 0.0001,
+    "window_sec": 8.0,
+    "patch_sec": 1.0,
+    "resample_hz": 200.0,
+    "grid": [
+      4,
+      4,
+      4
+    ],
+    "min_channels": 16,
+    "max_channels": 64,
+    "window_zscore": false,
+    "unfreeze_last_n": 2,
+    "unfreeze_temporal_conv": false,
+    "max_train_windows": 0,
+    "seed": 29,
+    "null": true,
+    "time_baseline": true,
+    "residual_target": true,
+    "time_harmonics": 6,
+    "verbose": true,
+    "func": "<function eval_cmd at 0x70e4e77214e0>"
+  },
+  "models": {
+    "gradCPT_simultaneous_EEG_fMRI_DTI_OpenNeuro_ds006040/distilled_residual": {
+      "roi_corr_mean": 0.07039869806612842,
+      "spatial_corr_mean": 0.07709605177186839,
+      "r2_variance_weighted": -0.026840416714549065,
+      "latent_corr_mean": 0.07039869806612842,
+      "residual_latent_corr_mean": -0.003211887958968873,
+      "best_val_mse": 0.9058723381587437
+    },
+    "gradCPT_simultaneous_EEG_fMRI_DTI_OpenNeuro_ds006040/distilled_residual_shifted_null": {
+      "roi_corr_mean": 0.07506226336408872,
+      "spatial_corr_mean": 0.0774910087383712,
+      "r2_variance_weighted": -0.02046850696206093,
+      "latent_corr_mean": 0.07506226336408872,
+      "residual_latent_corr_mean": 0.006830865533629549,
+      "best_val_mse": 0.9073464397400145
+    },
+    "gradCPT_simultaneous_EEG_fMRI_DTI_OpenNeuro_ds006040/distilled_shifted_null": {
+      "roi_corr_mean": 0.00832032220387191,
+      "spatial_corr_mean": -0.004822983545470551,
+      "r2_variance_weighted": -0.013791423290967941,
+      "latent_corr_mean": 0.00832032220387191,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": 1.0113626256821648
+    },
+    "gradCPT_simultaneous_EEG_fMRI_DTI_OpenNeuro_ds006040/distilled_spatial": {
+      "roi_corr_mean": -0.006511683609460306,
+      "spatial_corr_mean": 0.00030332884950596325,
+      "r2_variance_weighted": -0.005582565441727638,
+      "latent_corr_mean": -0.006511683609460306,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": 1.0044091137628706
+    },
+    "gradCPT_simultaneous_EEG_fMRI_DTI_OpenNeuro_ds006040/time_dataset_ridge": {
+      "roi_corr_mean": 0.07448871533415513,
+      "spatial_corr_mean": 0.07770820077068495,
+      "r2_variance_weighted": -0.018396852537989616,
+      "latent_corr_mean": 0.07448871533415513,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": NaN
+    }
+  }
+}

@@ -1,0 +1,372 @@
+{
+  "config": {
+    "command": "eval",
+    "feature_dir": "data/labram_frozen_v1/features",
+    "out_dir": "results/labram_frozen_v1_contrast_w005_f1_e20",
+    "device": "cuda",
+    "amp": true,
+    "n_components": 8,
+    "folds": 3,
+    "max_folds": 1,
+    "epochs": 20,
+    "patience": 5,
+    "batch_size": 512,
+    "lr": 0.0008,
+    "weight_decay": 0.001,
+    "d_model": 256,
+    "contrastive_dim": 128,
+    "dropout": 0.15,
+    "corr_weight": 0.05,
+    "contrastive_weight": 0.05,
+    "contrastive_temp": 0.07,
+    "contrastive_min_items": 4,
+    "grad_clip": 1.0,
+    "min_delta": 0.0001,
+    "seed": 17,
+    "single_ridge": true,
+    "null": true,
+    "time_baseline": true,
+    "residual_target": true,
+    "time_harmonics": 6,
+    "verbose": false,
+    "func": "<function eval_cmd at 0x7c0f53a228e0>"
+  },
+  "models": {
+    "Affective_music_listening_OpenNeuro_ds002725/pooled_labram_mlp": {
+      "roi_corr_mean": 0.010507653954846319,
+      "spatial_corr_mean": -0.003762492510022218,
+      "r2_variance_weighted": -0.011371258646249771,
+      "latent_corr_mean": 0.03698359668487683,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": 1.0034841502022094
+    },
+    "Affective_music_listening_OpenNeuro_ds002725/pooled_labram_residual_mlp": {
+      "roi_corr_mean": 0.17856520204077242,
+      "spatial_corr_mean": 0.06246916120083119,
+      "r2_variance_weighted": 0.029574265703558922,
+      "latent_corr_mean": 0.13383173802867532,
+      "residual_latent_corr_mean": 0.022309052059426904,
+      "best_val_mse": 0.8977124843194867
+    },
+    "Affective_music_listening_OpenNeuro_ds002725/pooled_labram_residual_shifted_null": {
+      "roi_corr_mean": 0.19059830590049387,
+      "spatial_corr_mean": 0.08344590616134816,
+      "r2_variance_weighted": 0.043399035930633545,
+      "latent_corr_mean": 0.13603417109698057,
+      "residual_latent_corr_mean": -0.013813278870657086,
+      "best_val_mse": 0.8931761333769147
+    },
+    "Affective_music_listening_OpenNeuro_ds002725/pooled_labram_shifted_null": {
+      "roi_corr_mean": -0.06650111662747804,
+      "spatial_corr_mean": -0.032075453426214116,
+      "r2_variance_weighted": -0.056378647685050964,
+      "latent_corr_mean": -0.024652369203977287,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": 1.004246183160014
+    },
+    "Affective_music_listening_OpenNeuro_ds002725/single_labram_ridge": {
+      "roi_corr_mean": -0.03903474473008828,
+      "spatial_corr_mean": -0.06598593373489996,
+      "r2_variance_weighted": -0.27450236678123474,
+      "latent_corr_mean": 0.0335785272764042,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": NaN
+    },
+    "Affective_music_listening_OpenNeuro_ds002725/time_dataset_ridge": {
+      "roi_corr_mean": 0.20016189888497138,
+      "spatial_corr_mean": 0.09129491637435452,
+      "r2_variance_weighted": 0.05226805433630943,
+      "latent_corr_mean": 0.13902531587518752,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": NaN
+    },
+    "Motor_imagery_neurofeedback_XP2_OpenNeuro_ds002338/pooled_labram_mlp": {
+      "roi_corr_mean": 0.1271191038613324,
+      "spatial_corr_mean": 0.019118944371814755,
+      "r2_variance_weighted": 0.008313091471791267,
+      "latent_corr_mean": 0.059459138894453645,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": 0.9991348448740343
+    },
+    "Motor_imagery_neurofeedback_XP2_OpenNeuro_ds002338/pooled_labram_residual_mlp": {
+      "roi_corr_mean": 0.33453669074424397,
+      "spatial_corr_mean": 0.3529972620484875,
+      "r2_variance_weighted": 0.1413554698228836,
+      "latent_corr_mean": 0.22588264840305783,
+      "residual_latent_corr_mean": 0.028299080673605204,
+      "best_val_mse": 0.9174169847375615
+    },
+    "Motor_imagery_neurofeedback_XP2_OpenNeuro_ds002338/pooled_labram_residual_shifted_null": {
+      "roi_corr_mean": 0.33470274526098365,
+      "spatial_corr_mean": 0.34281432741642426,
+      "r2_variance_weighted": 0.14084255695343018,
+      "latent_corr_mean": 0.22242113447282463,
+      "residual_latent_corr_mean": -0.0560558628058061,
+      "best_val_mse": 0.9102830434347814
+    },
+    "Motor_imagery_neurofeedback_XP2_OpenNeuro_ds002338/pooled_labram_shifted_null": {
+      "roi_corr_mean": 0.1336845350506337,
+      "spatial_corr_mean": 0.015305876576847963,
+      "r2_variance_weighted": 0.003961424343287945,
+      "latent_corr_mean": 0.019382285769097507,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": 1.0006478796428775
+    },
+    "Motor_imagery_neurofeedback_XP2_OpenNeuro_ds002338/single_labram_ridge": {
+      "roi_corr_mean": 0.011074457305994656,
+      "spatial_corr_mean": -0.032454844539140326,
+      "r2_variance_weighted": -7.352815628051758,
+      "latent_corr_mean": -0.01843913848279044,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": NaN
+    },
+    "Motor_imagery_neurofeedback_XP2_OpenNeuro_ds002338/time_dataset_ridge": {
+      "roi_corr_mean": 0.33449753022978257,
+      "spatial_corr_mean": 0.3508544966367165,
+      "r2_variance_weighted": 0.1428498923778534,
+      "latent_corr_mean": 0.2229512620542664,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": NaN
+    },
+    "Multi_session_EEG_fMRI_experience_sampling_OpenNeuro_ds007216/pooled_labram_mlp": {
+      "roi_corr_mean": 0.015943394046189496,
+      "spatial_corr_mean": 0.022555628774414048,
+      "r2_variance_weighted": 0.00021503186144400388,
+      "latent_corr_mean": 0.03110353390366072,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": 1.0232374899057242
+    },
+    "Multi_session_EEG_fMRI_experience_sampling_OpenNeuro_ds007216/pooled_labram_residual_mlp": {
+      "roi_corr_mean": 0.15009749653290783,
+      "spatial_corr_mean": 0.14827433482012095,
+      "r2_variance_weighted": 0.02936301752924919,
+      "latent_corr_mean": 0.23261419590562582,
+      "residual_latent_corr_mean": -0.002266220224555582,
+      "best_val_mse": 0.9525317885178786
+    },
+    "Multi_session_EEG_fMRI_experience_sampling_OpenNeuro_ds007216/pooled_labram_residual_shifted_null": {
+      "roi_corr_mean": 0.15135606449621264,
+      "spatial_corr_mean": 0.15233138639506313,
+      "r2_variance_weighted": 0.030067915096879005,
+      "latent_corr_mean": 0.23286915011703968,
+      "residual_latent_corr_mean": 0.0011989497725153342,
+      "best_val_mse": 0.9442224655004648
+    },
+    "Multi_session_EEG_fMRI_experience_sampling_OpenNeuro_ds007216/pooled_labram_shifted_null": {
+      "roi_corr_mean": 0.037753900895040715,
+      "spatial_corr_mean": 0.03053039746114163,
+      "r2_variance_weighted": 0.0004748111532535404,
+      "latent_corr_mean": 0.07403257850091904,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": 1.022252503138322
+    },
+    "Multi_session_EEG_fMRI_experience_sampling_OpenNeuro_ds007216/single_labram_ridge": {
+      "roi_corr_mean": 0.002638643097725435,
+      "spatial_corr_mean": 0.008742293073654216,
+      "r2_variance_weighted": -4.776068687438965,
+      "latent_corr_mean": -0.002167568905861117,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": NaN
+    },
+    "Multi_session_EEG_fMRI_experience_sampling_OpenNeuro_ds007216/time_dataset_ridge": {
+      "roi_corr_mean": 0.1507958430738654,
+      "spatial_corr_mean": 0.1513615728644344,
+      "r2_variance_weighted": 0.030498886480927467,
+      "latent_corr_mean": 0.2328910706564784,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": NaN
+    },
+    "Sleep_rest_EEG_fMRI_OpenNeuro_ds003768/pooled_labram_mlp": {
+      "roi_corr_mean": 0.03984273581227171,
+      "spatial_corr_mean": -0.03178747089222603,
+      "r2_variance_weighted": -0.004995289724320173,
+      "latent_corr_mean": 0.06747056590393186,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": 1.023756803427407
+    },
+    "Sleep_rest_EEG_fMRI_OpenNeuro_ds003768/pooled_labram_residual_mlp": {
+      "roi_corr_mean": 0.17542746246544993,
+      "spatial_corr_mean": 0.12718074952260552,
+      "r2_variance_weighted": 0.044530823826789856,
+      "latent_corr_mean": 0.17079495533835143,
+      "residual_latent_corr_mean": -0.03013373867725022,
+      "best_val_mse": 0.9473356420322302
+    },
+    "Sleep_rest_EEG_fMRI_OpenNeuro_ds003768/pooled_labram_residual_shifted_null": {
+      "roi_corr_mean": 0.18658840737771243,
+      "spatial_corr_mean": 0.13918428756367157,
+      "r2_variance_weighted": 0.05072850361466408,
+      "latent_corr_mean": 0.17572468639991712,
+      "residual_latent_corr_mean": -0.003480379469692707,
+      "best_val_mse": 0.936179316780869
+    },
+    "Sleep_rest_EEG_fMRI_OpenNeuro_ds003768/pooled_labram_shifted_null": {
+      "roi_corr_mean": 0.07580112604046008,
+      "spatial_corr_mean": 0.03857698349949773,
+      "r2_variance_weighted": 0.0031150549184530973,
+      "latent_corr_mean": 0.06327197188511491,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": 1.0218103201630304
+    },
+    "Sleep_rest_EEG_fMRI_OpenNeuro_ds003768/single_labram_ridge": {
+      "roi_corr_mean": 0.08636434973232099,
+      "spatial_corr_mean": 0.028348928784001064,
+      "r2_variance_weighted": -0.8098787665367126,
+      "latent_corr_mean": 0.045953429536893964,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": NaN
+    },
+    "Sleep_rest_EEG_fMRI_OpenNeuro_ds003768/time_dataset_ridge": {
+      "roi_corr_mean": 0.1856861434862367,
+      "spatial_corr_mean": 0.1369169010560971,
+      "r2_variance_weighted": 0.0518948994576931,
+      "latent_corr_mean": 0.17192234634421766,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": NaN
+    },
+    "Speeded_perceptual_judgments_confidence_OpenNeuro_ds002158/pooled_labram_mlp": {
+      "roi_corr_mean": 0.0961825023732672,
+      "spatial_corr_mean": 0.06844986724402023,
+      "r2_variance_weighted": 0.006258479319512844,
+      "latent_corr_mean": -0.010191563284024596,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": 1.0447490769360872
+    },
+    "Speeded_perceptual_judgments_confidence_OpenNeuro_ds002158/pooled_labram_residual_mlp": {
+      "roi_corr_mean": 0.3810564879895537,
+      "spatial_corr_mean": 0.3831535732418839,
+      "r2_variance_weighted": 0.20342956483364105,
+      "latent_corr_mean": 0.17525425320491195,
+      "residual_latent_corr_mean": -0.04348495774320327,
+      "best_val_mse": 0.9575028261475652
+    },
+    "Speeded_perceptual_judgments_confidence_OpenNeuro_ds002158/pooled_labram_residual_shifted_null": {
+      "roi_corr_mean": 0.3854557709728397,
+      "spatial_corr_mean": 0.381982742166357,
+      "r2_variance_weighted": 0.20572520792484283,
+      "latent_corr_mean": 0.18345826340373605,
+      "residual_latent_corr_mean": 0.04924083437072113,
+      "best_val_mse": 0.9535363083337387
+    },
+    "Speeded_perceptual_judgments_confidence_OpenNeuro_ds002158/pooled_labram_shifted_null": {
+      "roi_corr_mean": 0.12707307059099548,
+      "spatial_corr_mean": 0.05363605863316361,
+      "r2_variance_weighted": 0.005412306170910597,
+      "latent_corr_mean": 0.07415751193184406,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": 1.0472622797467606
+    },
+    "Speeded_perceptual_judgments_confidence_OpenNeuro_ds002158/single_labram_ridge": {
+      "roi_corr_mean": 0.021310570361720238,
+      "spatial_corr_mean": 0.0195134801564933,
+      "r2_variance_weighted": -0.6547859311103821,
+      "latent_corr_mean": 0.018716098100412637,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": NaN
+    },
+    "Speeded_perceptual_judgments_confidence_OpenNeuro_ds002158/time_dataset_ridge": {
+      "roi_corr_mean": 0.3831016679723689,
+      "spatial_corr_mean": 0.3831049548633328,
+      "r2_variance_weighted": 0.20580151677131653,
+      "latent_corr_mean": 0.18112104339525104,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": NaN
+    },
+    "gradCPT_simultaneous_EEG_fMRI_DTI_OpenNeuro_ds006040/pooled_labram_mlp": {
+      "roi_corr_mean": -0.001826098754463601,
+      "spatial_corr_mean": -0.000558582692297763,
+      "r2_variance_weighted": -0.0017838749336078763,
+      "latent_corr_mean": -0.009975114051485434,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": 1.0334141998929163
+    },
+    "gradCPT_simultaneous_EEG_fMRI_DTI_OpenNeuro_ds006040/pooled_labram_residual_mlp": {
+      "roi_corr_mean": 0.1590057335270103,
+      "spatial_corr_mean": 0.16915743141832665,
+      "r2_variance_weighted": 0.032273970544338226,
+      "latent_corr_mean": 0.20254955952987075,
+      "residual_latent_corr_mean": 0.010313690814655274,
+      "best_val_mse": 0.9543354072535348
+    },
+    "gradCPT_simultaneous_EEG_fMRI_DTI_OpenNeuro_ds006040/pooled_labram_residual_shifted_null": {
+      "roi_corr_mean": 0.15843312669312581,
+      "spatial_corr_mean": 0.16755399598401524,
+      "r2_variance_weighted": 0.032452769577503204,
+      "latent_corr_mean": 0.20304501755163074,
+      "residual_latent_corr_mean": 0.02645819867029786,
+      "best_val_mse": 0.9451382754017429
+    },
+    "gradCPT_simultaneous_EEG_fMRI_DTI_OpenNeuro_ds006040/pooled_labram_shifted_null": {
+      "roi_corr_mean": -0.006699512909108307,
+      "spatial_corr_mean": -0.0012419983432475801,
+      "r2_variance_weighted": -0.0013069900451228023,
+      "latent_corr_mean": -0.011112804931144638,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": 1.036465596975447
+    },
+    "gradCPT_simultaneous_EEG_fMRI_DTI_OpenNeuro_ds006040/single_labram_ridge": {
+      "roi_corr_mean": 0.002869636284231092,
+      "spatial_corr_mean": -0.0013874360096088226,
+      "r2_variance_weighted": -0.3067592680454254,
+      "latent_corr_mean": 0.0025742430007085204,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": NaN
+    },
+    "gradCPT_simultaneous_EEG_fMRI_DTI_OpenNeuro_ds006040/time_dataset_ridge": {
+      "roi_corr_mean": 0.15757457926520146,
+      "spatial_corr_mean": 0.17022154571450998,
+      "r2_variance_weighted": 0.03276541829109192,
+      "latent_corr_mean": 0.2019204655662179,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": NaN
+    },
+    "natview/pooled_labram_mlp": {
+      "roi_corr_mean": 0.00907531402692257,
+      "spatial_corr_mean": -0.002817240548146938,
+      "r2_variance_weighted": -0.0005140322609804571,
+      "latent_corr_mean": -0.00889096679384238,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": 1.0246199354291075
+    },
+    "natview/pooled_labram_residual_mlp": {
+      "roi_corr_mean": 0.011798086683338625,
+      "spatial_corr_mean": -6.877541042895075e-05,
+      "r2_variance_weighted": -0.0035641747526824474,
+      "latent_corr_mean": 0.00141931590042077,
+      "residual_latent_corr_mean": 0.0023877432104200125,
+      "best_val_mse": 0.9350572444309295
+    },
+    "natview/pooled_labram_residual_shifted_null": {
+      "roi_corr_mean": -0.016549868678121128,
+      "spatial_corr_mean": 0.000935847179906754,
+      "r2_variance_weighted": -0.0005669939564540982,
+      "latent_corr_mean": -0.0016988917486742139,
+      "residual_latent_corr_mean": -0.0010003992938436568,
+      "best_val_mse": 0.9307991499510556
+    },
+    "natview/pooled_labram_shifted_null": {
+      "roi_corr_mean": -0.025263592270021035,
+      "spatial_corr_mean": -0.0017554569819534314,
+      "r2_variance_weighted": -0.000670171866659075,
+      "latent_corr_mean": -0.01434771652566269,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": 1.0227964915202008
+    },
+    "natview/single_labram_ridge": {
+      "roi_corr_mean": 0.023243331200501417,
+      "spatial_corr_mean": -0.0059397719273094245,
+      "r2_variance_weighted": 0.0004944324609823525,
+      "latent_corr_mean": 0.0012167675886303186,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": NaN
+    },
+    "natview/time_dataset_ridge": {
+      "roi_corr_mean": -0.013459745737200136,
+      "spatial_corr_mean": -0.0032398412549893727,
+      "r2_variance_weighted": -4.4814343709731475e-05,
+      "latent_corr_mean": -0.0041416684398427606,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": NaN
+    }
+  }
+}

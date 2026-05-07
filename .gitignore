@@ -25,6 +25,7 @@ Thumbs.db
 data/derived/
 data/pooled_v1/
 data/pooled_raw_v1*/
+data/labram_frozen_v1*/
 results/**/*.npz
 results/**/cache/
 results/**/pid

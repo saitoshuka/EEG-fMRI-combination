@@ -1,0 +1,95 @@
+{
+  "config": {
+    "command": "eval",
+    "raw_cache_dir": "/home/sudaxin/projects/paired_data/data/pooled_raw_v1_fullsubj/run_cache",
+    "out_dir": "results/labram_distill_affective_pos_unfreeze_contrast_f1_e5",
+    "checkpoint": "/home/sudaxin/projects/paired_data/external/LaBraM/checkpoints/labram-base.pth",
+    "include_dataset": [
+      "Affective_music_listening_OpenNeuro_ds002725"
+    ],
+    "device": "cuda",
+    "amp": true,
+    "folds": 3,
+    "max_folds": 1,
+    "epochs": 5,
+    "patience": 3,
+    "batch_size": 16,
+    "lr": 2e-05,
+    "weight_decay": 0.001,
+    "d_model": 128,
+    "heads": 4,
+    "layers": 1,
+    "dropout": 0.1,
+    "corr_weight": 0.05,
+    "contrastive_weight": 0.02,
+    "contrastive_temp": 0.07,
+    "contrastive_min_items": 4,
+    "grad_clip": 1.0,
+    "min_delta": 0.0001,
+    "window_sec": 8.0,
+    "patch_sec": 1.0,
+    "resample_hz": 200.0,
+    "grid": [
+      4,
+      4,
+      4
+    ],
+    "min_channels": 16,
+    "max_channels": 64,
+    "window_zscore": false,
+    "unfreeze_last_n": 2,
+    "unfreeze_temporal_conv": false,
+    "unfreeze_pos_embed": true,
+    "unfreeze_time_embed": true,
+    "max_train_windows": 4096,
+    "seed": 29,
+    "null": true,
+    "time_baseline": true,
+    "residual_target": true,
+    "time_harmonics": 6,
+    "verbose": true,
+    "func": "<function eval_cmd at 0x7eec3bf253a0>"
+  },
+  "models": {
+    "Affective_music_listening_OpenNeuro_ds002725/distilled_residual": {
+      "roi_corr_mean": 0.023543328989035217,
+      "spatial_corr_mean": -0.06793907454354989,
+      "r2_variance_weighted": -0.11875105649232864,
+      "latent_corr_mean": 0.023543328989035217,
+      "residual_latent_corr_mean": -0.030310829304179165,
+      "best_val_mse": 0.9001606174351013
+    },
+    "Affective_music_listening_OpenNeuro_ds002725/distilled_residual_shifted_null": {
+      "roi_corr_mean": 0.04175744124222547,
+      "spatial_corr_mean": -0.060302578863577,
+      "r2_variance_weighted": -0.0866781547665596,
+      "latent_corr_mean": 0.04175744124222547,
+      "residual_latent_corr_mean": -0.002798628114760504,
+      "best_val_mse": 0.9030239219518051
+    },
+    "Affective_music_listening_OpenNeuro_ds002725/distilled_shifted_null": {
+      "roi_corr_mean": 0.004022214481665287,
+      "spatial_corr_mean": 0.009397522770338512,
+      "r2_variance_weighted": -0.018349846825003624,
+      "latent_corr_mean": 0.004022214481665287,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": 1.0000706026234578
+    },
+    "Affective_music_listening_OpenNeuro_ds002725/distilled_spatial": {
+      "roi_corr_mean": 0.008515353219991084,
+      "spatial_corr_mean": 0.010724436957069185,
+      "r2_variance_weighted": -0.013729971833527088,
+      "latent_corr_mean": 0.008515353219991084,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": 0.9799558292959154
+    },
+    "Affective_music_listening_OpenNeuro_ds002725/time_dataset_ridge": {
+      "roi_corr_mean": 0.04787850982393138,
+      "spatial_corr_mean": -0.05791473266978811,
+      "r2_variance_weighted": -0.07558596134185791,
+      "latent_corr_mean": 0.04787850982393138,
+      "residual_latent_corr_mean": NaN,
+      "best_val_mse": NaN
+    }
+  }
+}
