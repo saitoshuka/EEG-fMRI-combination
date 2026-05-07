@@ -1,0 +1,24 @@
+.venv/
+.venv-win/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Large local data and download state.
+downloads/paired_datasets/
+downloads/archives/
+downloads/logs/
+downloads/.openneuro_minimal.lock
+downloads/.non_openneuro_download.lock
+
+# Browser / OS sidecar files.
+*:Zone.Identifier
+.DS_Store
+Thumbs.db
+
+# Derived feature caches can be regenerated from scripts.
+data/derived/
+results/**/*.npz
+results/**/cache/

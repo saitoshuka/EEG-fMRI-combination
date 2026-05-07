@@ -1,0 +1,15 @@
+name: eeg
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - h5py
+  - joblib
+  - matplotlib
+  - mne
+  - numpy
+  - pandas
+  - pymatreader
+  - scikit-learn
+  - scipy
+  - tqdm
