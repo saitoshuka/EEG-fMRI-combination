@@ -1,0 +1,11 @@
+dataset,subset,model,grid_corr_mean,spatial_corr_mean,rmse,r2_weighted,latent_corr_mean,classification_acc,classification_f1,notes
+XP1,all_53_runs,train_mean,0.0000,-0.0035,1.0000,-0.0000,,,,
+XP1,all_53_runs,schedule_or_time_ridge,0.4460,0.2726,0.8478,0.2813,0.1017,0.6141,0.6168,"No EEG input; generated fMRI classifies rest/task about as well as real fMRI."
+XP1,all_53_runs,eeg_ridge,0.0285,0.0270,3.1799,-9.1118,-0.0056,0.5077,0.4509,"Weak EEG-only reconstruction on paper subject split."
+XP1,all_53_runs,eeg_shifted_null,-0.0202,-0.0275,1.4203,-1.0172,-0.0107,0.4889,0.2872,"Circularly shifted training target control."
+XP1,all_53_runs,schedule_direct,,,,,,1.0000,1.0000,"Direct rest/task classification from task schedule only."
+XP1,nf_29_runs,schedule_or_time_ridge,0.4354,0.2474,0.8507,0.2763,0.1042,0.6869,0.6630,"No EEG input; exceeded real-fMRI classifier accuracy in this subset."
+XP1,nf_29_runs,eeg_ridge,0.0350,0.0186,2.8162,-6.9309,-0.0096,0.4714,0.1180,"EEG-only signal is small and classification is poor."
+NODDI,rest_16_subjects,time_ridge,0.3210,0.4871,0.8756,0.2334,0.0556,,,"No EEG input; run-position/time features predict held-out rest fMRI structure."
+NODDI,rest_16_subjects,eeg_ridge,0.1234,0.0690,1.1101,-0.2323,0.0213,,,"Above shifted null but much weaker than time-only baseline."
+NODDI,rest_16_subjects,eeg_shifted_null,-0.1258,-0.0716,1.1244,-0.2642,-0.0324,,,"Circularly shifted training target control."

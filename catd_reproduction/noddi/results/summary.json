@@ -1,0 +1,128 @@
+{
+  "dataset": "noddi",
+  "features": "/home/sudaxin/projects/paired_data/catd_reproduction/noddi/features.npz",
+  "split": {
+    "train_subjects": [
+      "32",
+      "35",
+      "36",
+      "37",
+      "38",
+      "39",
+      "40",
+      "42",
+      "43",
+      "44",
+      "45",
+      "46",
+      "47",
+      "50"
+    ],
+    "test_subjects": [
+      "48",
+      "49"
+    ],
+    "paper_split": true
+  },
+  "shape": {
+    "X_eeg": [
+      4752,
+      315
+    ],
+    "X_schedule": [
+      4752,
+      18
+    ],
+    "Y": [
+      4752,
+      256
+    ],
+    "n_runs": 16,
+    "tasks": [
+      "rest"
+    ]
+  },
+  "config": {
+    "zscore_run": true,
+    "n_components": 16,
+    "grid": [
+      8,
+      8,
+      4
+    ]
+  },
+  "generation": {
+    "train_mean": {
+      "model": "train_mean",
+      "n_test": 594,
+      "grid_corr_mean": 3.730559870205004e-09,
+      "grid_corr_median": 5.533966396242818e-09,
+      "grid_corr_positive_frac": 0.515625,
+      "spatial_corr_mean": -0.000865901759152927,
+      "spatial_corr_median": -0.00245729589369148,
+      "rmse": 1.0,
+      "r2_weighted": -4.656608432185294e-09
+    },
+    "schedule_or_time_ridge": {
+      "model": "schedule_or_time_ridge",
+      "n_test": 594,
+      "grid_corr_mean": 0.32098161995327246,
+      "grid_corr_median": 0.18281570076942444,
+      "grid_corr_positive_frac": 0.59765625,
+      "spatial_corr_mean": 0.4870736806368085,
+      "spatial_corr_median": 0.5376967787742615,
+      "rmse": 0.87557452917099,
+      "r2_weighted": 0.23336927592754364,
+      "chosen_alpha": 6.30957344480193,
+      "pca_components": 16.0,
+      "pca_explained_variance": 0.5456071496009827,
+      "latent_corr_mean": 0.055619850754737854
+    },
+    "eeg_ridge": {
+      "model": "eeg_ridge",
+      "n_test": 594,
+      "grid_corr_mean": 0.12341246767437042,
+      "grid_corr_median": 0.15223950892686844,
+      "grid_corr_positive_frac": 0.796875,
+      "spatial_corr_mean": 0.06902361676756995,
+      "spatial_corr_median": 0.09263813123106956,
+      "rmse": 1.11009681224823,
+      "r2_weighted": -0.23231492936611176,
+      "chosen_alpha": 18.478497974222908,
+      "pca_components": 16.0,
+      "pca_explained_variance": 0.5456071496009827,
+      "latent_corr_mean": 0.021341323503293097
+    },
+    "eeg_shifted_null": {
+      "model": "eeg_shifted_null",
+      "n_test": 594,
+      "grid_corr_mean": -0.12575170023228566,
+      "grid_corr_median": -0.13435868173837662,
+      "grid_corr_positive_frac": 0.30859375,
+      "spatial_corr_mean": -0.07156657769999535,
+      "spatial_corr_median": -0.08825214579701424,
+      "rmse": 1.1243503093719482,
+      "r2_weighted": -0.264163613319397,
+      "chosen_alpha": 54.116952654646376,
+      "pca_components": 16.0,
+      "pca_explained_variance": 0.5456070899963379,
+      "latent_corr_mean": -0.03236903517972678
+    },
+    "eeg_plus_schedule_ridge": {
+      "model": "eeg_plus_schedule_ridge",
+      "n_test": 594,
+      "grid_corr_mean": 0.2773517176437963,
+      "grid_corr_median": 0.14135529100894928,
+      "grid_corr_positive_frac": 0.69140625,
+      "spatial_corr_mean": 0.3515433746247759,
+      "spatial_corr_median": 0.3977743685245514,
+      "rmse": 0.9564411640167236,
+      "r2_weighted": 0.08522027730941772,
+      "chosen_alpha": 18.478497974222908,
+      "pca_components": 16.0,
+      "pca_explained_variance": 0.5456071496009827,
+      "latent_corr_mean": 0.04023339715786278
+    }
+  },
+  "classification": {}
+}

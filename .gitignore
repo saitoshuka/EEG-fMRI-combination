@@ -22,3 +22,10 @@ Thumbs.db
 data/derived/
 results/**/*.npz
 results/**/cache/
+
+# CATD reproduction local extracts and derived arrays.
+catd_reproduction/data/
+catd_reproduction/**/session_cache/
+catd_reproduction/**/cache/
+catd_reproduction/**/*.npz
+catd_reproduction/*_smoke/

@@ -1,0 +1,161 @@
+{
+  "dataset": "xp1",
+  "features": "/home/sudaxin/projects/paired_data/catd_reproduction/xp1/features.npz",
+  "split": {
+    "train_subjects": [
+      "sub-xp101",
+      "sub-xp102",
+      "sub-xp103",
+      "sub-xp107",
+      "sub-xp108",
+      "sub-xp109",
+      "sub-xp110"
+    ],
+    "test_subjects": [
+      "sub-xp104",
+      "sub-xp105",
+      "sub-xp106"
+    ],
+    "paper_split": true
+  },
+  "shape": {
+    "X_eeg": [
+      5742,
+      320
+    ],
+    "X_schedule": [
+      5742,
+      18
+    ],
+    "Y": [
+      5742,
+      256
+    ],
+    "n_runs": 29,
+    "tasks": [
+      "eegNF",
+      "eegfmriNF",
+      "fmriNF"
+    ]
+  },
+  "config": {
+    "zscore_run": true,
+    "n_components": 16,
+    "grid": [
+      8,
+      8,
+      4
+    ]
+  },
+  "generation": {
+    "train_mean": {
+      "model": "train_mean",
+      "n_test": 1782,
+      "grid_corr_mean": -1.5226571021744042e-09,
+      "grid_corr_median": -2.298238488407378e-09,
+      "grid_corr_positive_frac": 0.45703125,
+      "spatial_corr_mean": -0.0046027497725074865,
+      "spatial_corr_median": -0.006827340926975012,
+      "rmse": 1.0,
+      "r2_weighted": -2.328304882226462e-09
+    },
+    "schedule_or_time_ridge": {
+      "model": "schedule_or_time_ridge",
+      "n_test": 1782,
+      "grid_corr_mean": 0.43543633147498895,
+      "grid_corr_median": 0.42691342532634735,
+      "grid_corr_positive_frac": 0.91015625,
+      "spatial_corr_mean": 0.24740740717791113,
+      "spatial_corr_median": 0.24968457967042923,
+      "rmse": 0.850698709487915,
+      "r2_weighted": 0.2763116955757141,
+      "chosen_alpha": 6.30957344480193,
+      "pca_components": 16.0,
+      "pca_explained_variance": 0.610919713973999,
+      "latent_corr_mean": 0.10416535357944667
+    },
+    "eeg_ridge": {
+      "model": "eeg_ridge",
+      "n_test": 1782,
+      "grid_corr_mean": 0.035031273102731575,
+      "grid_corr_median": 0.025691251270473003,
+      "grid_corr_positive_frac": 0.734375,
+      "spatial_corr_mean": 0.018645883299024807,
+      "spatial_corr_median": 0.02639317326247692,
+      "rmse": 2.8161840438842773,
+      "r2_weighted": -6.930893898010254,
+      "chosen_alpha": 2.1544346900318843,
+      "pca_components": 16.0,
+      "pca_explained_variance": 0.610919713973999,
+      "latent_corr_mean": -0.009570931870257482
+    },
+    "eeg_shifted_null": {
+      "model": "eeg_shifted_null",
+      "n_test": 1782,
+      "grid_corr_mean": -0.04624664898841502,
+      "grid_corr_median": -0.04335682466626167,
+      "grid_corr_positive_frac": 0.12890625,
+      "spatial_corr_mean": -0.02767925451322619,
+      "spatial_corr_median": -0.018016554415225983,
+      "rmse": 2.1782171726226807,
+      "r2_weighted": -3.7446303367614746,
+      "chosen_alpha": 2.1544346900318843,
+      "pca_components": 16.0,
+      "pca_explained_variance": 0.6109196543693542,
+      "latent_corr_mean": -0.010657321487087756
+    },
+    "eeg_plus_schedule_ridge": {
+      "model": "eeg_plus_schedule_ridge",
+      "n_test": 1782,
+      "grid_corr_mean": 0.23979353319691654,
+      "grid_corr_median": 0.14081121236085892,
+      "grid_corr_positive_frac": 0.84765625,
+      "spatial_corr_mean": 0.05449148808186331,
+      "spatial_corr_median": 0.05964868515729904,
+      "rmse": 2.0882863998413086,
+      "r2_weighted": -3.3609402179718018,
+      "chosen_alpha": 2.1544346900318843,
+      "pca_components": 16.0,
+      "pca_explained_variance": 0.610919713973999,
+      "latent_corr_mean": 0.04972911442746408
+    }
+  },
+  "classification": {
+    "real_fmri": {
+      "input": "real_fmri",
+      "classifier": "trained_on_real_fmri_train",
+      "acc": 0.5892255892255892,
+      "f1": 0.5982436882546652
+    },
+    "schedule_generated": {
+      "input": "schedule_generated",
+      "classifier": "trained_on_real_fmri_train",
+      "acc": 0.6868686868686869,
+      "f1": 0.6630434782608695
+    },
+    "eeg_generated": {
+      "input": "eeg_generated",
+      "classifier": "trained_on_real_fmri_train",
+      "acc": 0.4713804713804714,
+      "f1": 0.11797752808988764
+    },
+    "eeg_shifted_null_generated": {
+      "input": "eeg_shifted_null_generated",
+      "classifier": "trained_on_real_fmri_train",
+      "acc": 0.500561167227834,
+      "f1": 0.3338323353293413
+    },
+    "eeg_plus_schedule_generated": {
+      "input": "eeg_plus_schedule_generated",
+      "classifier": "trained_on_real_fmri_train",
+      "acc": 0.5112233445566778,
+      "f1": 0.14858260019550343
+    },
+    "schedule_direct": {
+      "input": "schedule_direct",
+      "classifier": "trained_on_schedule_train",
+      "acc": 1.0,
+      "f1": 1.0
+    }
+  }
+}

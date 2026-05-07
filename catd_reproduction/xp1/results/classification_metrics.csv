@@ -1,0 +1,7 @@
+input,classifier,acc,f1
+real_fmri,trained_on_real_fmri_train,0.5892255892255892,0.5982436882546652
+schedule_generated,trained_on_real_fmri_train,0.6868686868686869,0.6630434782608695
+eeg_generated,trained_on_real_fmri_train,0.4713804713804714,0.11797752808988764
+eeg_shifted_null_generated,trained_on_real_fmri_train,0.500561167227834,0.3338323353293413
+eeg_plus_schedule_generated,trained_on_real_fmri_train,0.5112233445566778,0.14858260019550343
+schedule_direct,trained_on_schedule_train,1.0,1.0
