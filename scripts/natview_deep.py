@@ -33,6 +33,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.metrics import r2_score
 from sklearn.preprocessing import StandardScaler
 from torch import nn
+from torch.nn import functional as F
 from torch.utils.data import DataLoader, TensorDataset
 
 from natview_pilot import (
@@ -219,6 +220,29 @@ def make_model(args: argparse.Namespace, shape: DataShape, n_outputs: int) -> nn
     raise ValueError(f"Unknown model: {args.model}")
 
 
+def mean_pearson_corr(pred: torch.Tensor, target: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
+    pred_centered = pred - pred.mean(dim=0, keepdim=True)
+    target_centered = target - target.mean(dim=0, keepdim=True)
+    numerator = (pred_centered * target_centered).sum(dim=0)
+    denominator = torch.sqrt(
+        (pred_centered.square().sum(dim=0) * target_centered.square().sum(dim=0)).clamp_min(eps)
+    )
+    corr = numerator / denominator
+    return corr.mean()
+
+
+def deep_loss(pred: torch.Tensor, target: torch.Tensor, args: argparse.Namespace) -> torch.Tensor:
+    mse = F.mse_loss(pred, target)
+    if args.loss == "mse":
+        return mse
+    corr = mean_pearson_corr(pred, target)
+    if args.loss == "corr":
+        return 1.0 - corr
+    if args.loss == "mse_corr":
+        return mse - args.corr_weight * corr
+    raise ValueError(f"Unknown loss: {args.loss}")
+
+
 def train_torch_model(
     model: nn.Module,
     x_train: np.ndarray,
@@ -247,9 +271,10 @@ def train_torch_model(
         lr=args.lr,
         weight_decay=args.weight_decay,
     )
-    loss_fn = nn.MSELoss()
     best_loss = math.inf
     best_epoch = 0
+    best_val_mse = math.inf
+    best_val_corr = -math.inf
     best_state: dict[str, torch.Tensor] | None = None
     bad_epochs = 0
 
@@ -262,7 +287,7 @@ def train_torch_model(
             zb = zb.to(device)
             opt.zero_grad(set_to_none=True)
             pred = model(xb)
-            loss = loss_fn(pred, zb)
+            loss = deep_loss(pred, zb, args)
             loss.backward()
             if args.grad_clip > 0:
                 nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
@@ -273,24 +298,32 @@ def train_torch_model(
         model.eval()
         with torch.no_grad():
             val_pred = model(val_x)
-            val_loss = float(loss_fn(val_pred, val_z).detach().cpu())
+            val_mse = float(F.mse_loss(val_pred, val_z).detach().cpu())
+            val_corr = float(mean_pearson_corr(val_pred, val_z).detach().cpu())
+            val_loss = val_mse if args.select_metric == "val_mse" else -val_corr
         train_loss = train_loss_sum / max(1, seen)
         if val_loss < best_loss - args.min_delta:
             best_loss = val_loss
             best_epoch = epoch
+            best_val_mse = val_mse
+            best_val_corr = val_corr
             best_state = copy.deepcopy(model.state_dict())
             bad_epochs = 0
         else:
             bad_epochs += 1
         if args.verbose and (epoch == 1 or epoch % args.log_every == 0):
-            print(f"    epoch {epoch:03d} train_mse={train_loss:.5f} val_mse={val_loss:.5f}")
+            print(
+                f"    epoch {epoch:03d} train_loss={train_loss:.5f} "
+                f"val_mse={val_mse:.5f} val_corr={val_corr:.5f}"
+            )
         if bad_epochs >= args.patience:
             break
 
     if best_state is not None:
         model.load_state_dict(best_state)
     return model, {
-        "best_val_mse": float(best_loss),
+        "best_val_mse": float(best_val_mse),
+        "best_val_corr": float(best_val_corr),
         "best_epoch": float(best_epoch),
         "epochs_ran": float(epoch),
     }
@@ -399,6 +432,7 @@ def summarize_rows(rows: list[dict[str, object]], args: argparse.Namespace, shap
         "latent_corr_mean",
         "pca_explained_variance",
         "best_val_mse",
+        "best_val_corr",
         "best_epoch",
         "epochs_ran",
     ]
@@ -422,6 +456,9 @@ def summarize_rows(rows: list[dict[str, object]], args: argparse.Namespace, shap
             "heads": args.heads,
             "layers": args.layers,
             "hidden": args.hidden,
+            "loss": args.loss,
+            "corr_weight": args.corr_weight,
+            "select_metric": args.select_metric,
         },
         "models": {},
     }
@@ -679,6 +716,9 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--d-model", type=int, default=64)
     parser.add_argument("--heads", type=int, default=4)
     parser.add_argument("--layers", type=int, default=1)
+    parser.add_argument("--loss", choices=("mse", "mse_corr", "corr"), default="mse")
+    parser.add_argument("--corr-weight", type=float, default=0.2)
+    parser.add_argument("--select-metric", choices=("val_mse", "val_corr"), default="val_mse")
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--log-every", type=int, default=10)
     return parser

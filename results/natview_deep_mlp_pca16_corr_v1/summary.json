@@ -1,0 +1,68 @@
+{
+  "config": {
+    "features": "data/derived/natview_rest_features_papertr_offset10p5_w8_lags4to12.npz",
+    "model": "mlp",
+    "n_components": 16,
+    "split_mode": "grouped",
+    "group_by": "subject",
+    "folds": 5,
+    "null": false,
+    "shape": {
+      "n_lags": 5,
+      "n_bands": 5,
+      "n_channels": 54,
+      "n_features": 1350
+    },
+    "epochs": 120,
+    "patience": 18,
+    "batch_size": 256,
+    "lr": 0.0005,
+    "weight_decay": 0.005,
+    "dropout": 0.4,
+    "d_model": 64,
+    "heads": 4,
+    "layers": 1,
+    "hidden": 512,
+    "loss": "mse_corr",
+    "corr_weight": 0.2,
+    "select_metric": "val_corr"
+  },
+  "models": {
+    "eeg_deep_mlp": {
+      "roi_corr_mean": 0.01353260216367425,
+      "roi_corr_median": 0.013533800825146464,
+      "roi_corr_positive_frac": 0.714,
+      "spatial_corr_mean": 0.0010746911996338522,
+      "spatial_corr_median": 0.0024473894889314265,
+      "r2_uniform": -0.12476398730514618,
+      "r2_variance_weighted": -0.12476398730514618,
+      "retrieval_top1": 0.0029370578684263697,
+      "retrieval_top5": 0.015870806298440863,
+      "retrieval_mrr": 0.022148389970463846,
+      "latent_corr_mean": 0.0032961782136328695,
+      "pca_explained_variance": 0.8294949994948965,
+      "best_val_mse": 1.1525610446929933,
+      "best_val_corr": 0.009158797562122345,
+      "best_epoch": 25.2,
+      "epochs_ran": 43.2
+    },
+    "train_mean": {
+      "roi_corr_mean": 5.466600786030179e-20,
+      "roi_corr_median": 7.120671876582945e-20,
+      "roi_corr_positive_frac": 0.49399999999999994,
+      "spatial_corr_mean": -0.000803696555466752,
+      "spatial_corr_median": -0.00046606686784996963,
+      "r2_uniform": 0.0,
+      "r2_variance_weighted": 0.0,
+      "retrieval_top1": 0.0037844530125037113,
+      "retrieval_top5": 0.018922265062518557,
+      "retrieval_mrr": 0.023283131284689108,
+      "latent_corr_mean": NaN,
+      "pca_explained_variance": NaN,
+      "best_val_mse": NaN,
+      "best_val_corr": NaN,
+      "best_epoch": NaN,
+      "epochs_ran": NaN
+    }
+  }
+}

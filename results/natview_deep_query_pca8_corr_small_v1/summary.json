@@ -1,0 +1,68 @@
+{
+  "config": {
+    "features": "data/derived/natview_rest_features_papertr_offset10p5_w8_lags4to12.npz",
+    "model": "query_attention",
+    "n_components": 8,
+    "split_mode": "grouped",
+    "group_by": "subject",
+    "folds": 5,
+    "null": false,
+    "shape": {
+      "n_lags": 5,
+      "n_bands": 5,
+      "n_channels": 54,
+      "n_features": 1350
+    },
+    "epochs": 120,
+    "patience": 18,
+    "batch_size": 256,
+    "lr": 0.001,
+    "weight_decay": 0.001,
+    "dropout": 0.1,
+    "d_model": 32,
+    "heads": 4,
+    "layers": 1,
+    "hidden": 512,
+    "loss": "mse_corr",
+    "corr_weight": 0.2,
+    "select_metric": "val_corr"
+  },
+  "models": {
+    "eeg_deep_query_attention": {
+      "roi_corr_mean": 0.0006919708576209974,
+      "roi_corr_median": 0.0008779223394301692,
+      "roi_corr_positive_frac": 0.492,
+      "spatial_corr_mean": 0.003688313469840273,
+      "spatial_corr_median": 0.0028651273471267556,
+      "r2_uniform": -0.031771803256547194,
+      "r2_variance_weighted": -0.0317718032565472,
+      "retrieval_top1": 0.00443642546875095,
+      "retrieval_top5": 0.019591999989418067,
+      "retrieval_mrr": 0.02426047217515884,
+      "latent_corr_mean": 0.0022368411660749336,
+      "pca_explained_variance": 0.7469957800139359,
+      "best_val_mse": 1.0412662148475647,
+      "best_val_corr": 0.01168987862765789,
+      "best_epoch": 15.6,
+      "epochs_ran": 33.6
+    },
+    "train_mean": {
+      "roi_corr_mean": 5.466600786030179e-20,
+      "roi_corr_median": 7.120671876582945e-20,
+      "roi_corr_positive_frac": 0.49399999999999994,
+      "spatial_corr_mean": -0.000803696555466752,
+      "spatial_corr_median": -0.00046606686784996963,
+      "r2_uniform": 0.0,
+      "r2_variance_weighted": 0.0,
+      "retrieval_top1": 0.0037844530125037113,
+      "retrieval_top5": 0.018922265062518557,
+      "retrieval_mrr": 0.023283131284689108,
+      "latent_corr_mean": NaN,
+      "pca_explained_variance": NaN,
+      "best_val_mse": NaN,
+      "best_val_corr": NaN,
+      "best_epoch": NaN,
+      "epochs_ran": NaN
+    }
+  }
+}
