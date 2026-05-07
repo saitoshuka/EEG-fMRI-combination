@@ -502,6 +502,27 @@ def fit_predict(
     return y_pred.astype(np.float32), info
 
 
+def fit_direct_train_test(
+    x: np.ndarray,
+    y: np.ndarray,
+    train_idx: np.ndarray,
+    test_idx: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, dict[str, float]]:
+    """Direct multi-output ridge used to remove schedule/time nuisance effects."""
+    imputer = SimpleImputer(strategy="mean", keep_empty_features=True)
+    x_scaler = StandardScaler()
+    x_train = x_scaler.fit_transform(imputer.fit_transform(x[train_idx]))
+    x_test = x_scaler.transform(imputer.transform(x[test_idx]))
+    y_scaler = StandardScaler()
+    y_train_scaled = y_scaler.fit_transform(y[train_idx])
+    model = RidgeCV(alphas=np.logspace(-2, 5, 16))
+    model.fit(x_train, y_train_scaled)
+    pred_train = y_scaler.inverse_transform(model.predict(x_train))
+    pred_test = y_scaler.inverse_transform(model.predict(x_test))
+    info = {"chosen_alpha": float(np.atleast_1d(model.alpha_)[0])}
+    return pred_train.astype(np.float32), pred_test.astype(np.float32), info
+
+
 def metric_row(model: str, y_true: np.ndarray, y_pred: np.ndarray, info: dict[str, float]) -> dict[str, object]:
     corr = column_corr(y_true, y_pred)
     spatial = row_corr(y_true, y_pred)
@@ -611,6 +632,68 @@ def evaluate(args: argparse.Namespace) -> Path:
     )
     rows.append(metric_row("eeg_plus_schedule_ridge", y_eval[test_idx], pred_combo, info_combo))
 
+    residual_rows: list[dict[str, object]] = []
+    if args.residual:
+        nuisance_train, nuisance_test, nuisance_info = fit_direct_train_test(
+            x_sched,
+            y_eval,
+            train_idx,
+            test_idx,
+        )
+        residual_train = y_eval[train_idx] - nuisance_train
+        residual_test = y_eval[test_idx] - nuisance_test
+        residual_all = np.zeros_like(y_eval, dtype=np.float32)
+        residual_all[train_idx] = residual_train
+        residual_all[test_idx] = residual_test
+
+        residual_rows.append(
+            metric_row(
+                "residual_train_mean",
+                residual_test,
+                np.repeat(residual_train.mean(axis=0, keepdims=True), test_idx.size, axis=0),
+                {},
+            )
+        )
+        pred_resid_sched, info_resid_sched = fit_predict(
+            x_sched,
+            residual_all,
+            run,
+            train_idx,
+            test_idx,
+            args.n_components,
+            args.random_state + 3000,
+        )
+        residual_rows.append(metric_row("residual_schedule_or_time_ridge", residual_test, pred_resid_sched, info_resid_sched))
+        pred_resid_eeg, info_resid_eeg = fit_predict(
+            x_eeg,
+            residual_all,
+            run,
+            train_idx,
+            test_idx,
+            args.n_components,
+            args.random_state + 3001,
+        )
+        residual_rows.append(metric_row("residual_eeg_ridge", residual_test, pred_resid_eeg, info_resid_eeg))
+        pred_resid_null, info_resid_null = fit_predict(
+            x_eeg,
+            residual_all,
+            run,
+            train_idx,
+            test_idx,
+            args.n_components,
+            args.random_state + 4000,
+            shifted=True,
+        )
+        residual_rows.append(metric_row("residual_eeg_shifted_null", residual_test, pred_resid_null, info_resid_null))
+        residual_rows.append(
+            metric_row(
+                "removed_schedule_or_time_component",
+                y_eval[test_idx],
+                nuisance_test,
+                nuisance_info,
+            )
+        )
+
     metrics_path = args.out_dir / "generation_metrics.csv"
     fieldnames: list[str] = []
     for row in rows:
@@ -621,6 +704,19 @@ def evaluate(args: argparse.Namespace) -> Path:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+    residual_metrics_path: Path | None = None
+    if residual_rows:
+        residual_metrics_path = args.out_dir / "residual_metrics.csv"
+        residual_fieldnames: list[str] = []
+        for row in residual_rows:
+            for key in row:
+                if key not in residual_fieldnames:
+                    residual_fieldnames.append(key)
+        with residual_metrics_path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=residual_fieldnames)
+            writer.writeheader()
+            writer.writerows(residual_rows)
 
     cls_rows: list[dict[str, object]] = []
     if args.dataset == "xp1":
@@ -663,20 +759,27 @@ def evaluate(args: argparse.Namespace) -> Path:
             "zscore_run": args.zscore_run,
             "n_components": args.n_components,
             "grid": [int(x) for x in loaded["grid_shape"]],
+            "residual": args.residual,
         },
         "generation": {r["model"]: r for r in rows},
+        "residual_generation": {r["model"]: r for r in residual_rows},
         "classification": {r["input"]: r for r in cls_rows},
     }
     (args.out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    write_report(args, summary, metrics_path)
+    write_report(args, summary, metrics_path, residual_metrics_path)
     plot_summary(rows, args.out_dir)
+    if residual_rows:
+        plot_summary(residual_rows, args.out_dir / "residual")
     print(json.dumps(summary["generation"], indent=2))
+    if residual_rows:
+        print(json.dumps(summary["residual_generation"], indent=2))
     if cls_rows:
         print(json.dumps(summary["classification"], indent=2))
     return metrics_path
 
 
 def plot_summary(rows: list[dict[str, object]], out_dir: Path) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
     names = [str(r["model"]) for r in rows]
     vals = [float(r["grid_corr_mean"]) for r in rows]
     fig, ax = plt.subplots(figsize=(9, 4))
@@ -691,7 +794,12 @@ def plot_summary(rows: list[dict[str, object]], out_dir: Path) -> None:
     plt.close(fig)
 
 
-def write_report(args: argparse.Namespace, summary: dict[str, object], metrics_path: Path) -> None:
+def write_report(
+    args: argparse.Namespace,
+    summary: dict[str, object],
+    metrics_path: Path,
+    residual_metrics_path: Path | None = None,
+) -> None:
     lines = [
         f"# CATD Audit: {args.dataset.upper()}",
         "",
@@ -722,6 +830,30 @@ def write_report(args: argparse.Namespace, summary: dict[str, object], metrics_p
                 latent_corr_mean=float(row.get("latent_corr_mean", math.nan)),
             )
         )
+    if summary["residual_generation"]:
+        lines.extend(
+            [
+                "",
+                "## Residual Prediction Metrics",
+                "",
+                "Residual target is `real fMRI - schedule/time prediction`; this asks whether EEG explains fMRI variance beyond the no-EEG nuisance baseline.",
+                f"Residual metrics: `{residual_metrics_path}`",
+                "",
+                "| Model | Residual grid r mean | Residual spatial r mean | RMSE | R2 weighted | Latent r mean |",
+                "| --- | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for model, row in summary["residual_generation"].items():
+            lines.append(
+                "| {model} | {grid_corr_mean:.4f} | {spatial_corr_mean:.4f} | {rmse:.4f} | {r2_weighted:.4f} | {latent_corr_mean:.4f} |".format(
+                    model=model,
+                    grid_corr_mean=float(row.get("grid_corr_mean", math.nan)),
+                    spatial_corr_mean=float(row.get("spatial_corr_mean", math.nan)),
+                    rmse=float(row.get("rmse", math.nan)),
+                    r2_weighted=float(row.get("r2_weighted", math.nan)),
+                    latent_corr_mean=float(row.get("latent_corr_mean", math.nan)),
+                )
+            )
     if summary["classification"]:
         lines.extend(
             [
@@ -777,6 +909,7 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--random-state", type=int, default=42)
     parser.add_argument("--zscore-run", action="store_true", default=True)
     parser.add_argument("--no-zscore-run", dest="zscore_run", action="store_false")
+    parser.add_argument("--residual", action="store_true")
     parser.add_argument("--rebuild", action="store_true")
     parser.add_argument("--max-runs", type=int, default=0)
     parser.add_argument("command", choices=("build", "eval", "run"))

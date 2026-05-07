@@ -1,0 +1,87 @@
+{
+  "config": {
+    "features": "data/derived/natview_rest_features_papertr_offset10p5_w8_lags4to12.npz",
+    "target": "pca",
+    "n_components": 8,
+    "split_mode": "grouped",
+    "folds": 5,
+    "group_by": "subject",
+    "null": true,
+    "time_baseline": true,
+    "time_harmonics": 8,
+    "bold_ar_baseline": true,
+    "bold_ar_lags": "1,2,3"
+  },
+  "models": {
+    "bold_ar_oracle_ridge_pca": {
+      "roi_corr_mean": 0.8282469948383089,
+      "roi_corr_median": 0.8342174334612029,
+      "roi_corr_positive_frac": 1.0,
+      "spatial_corr_mean": 0.6198409536826496,
+      "spatial_corr_median": 0.6366360671199633,
+      "r2_uniform": 0.6869017911776222,
+      "r2_variance_weighted": 0.6869017911776221,
+      "retrieval_top1": 0.4153241512147899,
+      "retrieval_top5": 0.753162116291937,
+      "retrieval_mrr": 0.5673636068196813,
+      "latent_corr_mean": 0.9631955564582684,
+      "pca_explained_variance": 0.7469957800139359
+    },
+    "eeg_ridge_pca": {
+      "roi_corr_mean": 0.02914567406547399,
+      "roi_corr_median": 0.029330636189598365,
+      "roi_corr_positive_frac": 0.9179999999999999,
+      "spatial_corr_mean": 0.003865190597906544,
+      "spatial_corr_median": -0.0007060196073868541,
+      "r2_uniform": -0.17982275331400668,
+      "r2_variance_weighted": -0.17982275331400668,
+      "retrieval_top1": 0.005093901333217611,
+      "retrieval_top5": 0.021540578629131953,
+      "retrieval_mrr": 0.025007910878006835,
+      "latent_corr_mean": 0.012321514716238092,
+      "pca_explained_variance": 0.7469957800139359
+    },
+    "shifted_null_pca": {
+      "roi_corr_mean": -0.0009725381364141389,
+      "roi_corr_median": -0.001117138314763785,
+      "roi_corr_positive_frac": 0.4539999999999999,
+      "spatial_corr_mean": 0.0017280668653993619,
+      "spatial_corr_median": -0.0005571389114365626,
+      "r2_uniform": -0.14211374635057425,
+      "r2_variance_weighted": -0.1421137463505743,
+      "retrieval_top1": 0.003991545459924643,
+      "retrieval_top5": 0.020760946024206643,
+      "retrieval_mrr": 0.02392580888323545,
+      "latent_corr_mean": 0.001504201506934949,
+      "pca_explained_variance": 0.7469957800139359
+    },
+    "time_only_ridge_pca": {
+      "roi_corr_mean": 0.01740428544932954,
+      "roi_corr_median": 0.017539528011465595,
+      "roi_corr_positive_frac": 0.7300000000000001,
+      "spatial_corr_mean": -0.0065023347812985955,
+      "spatial_corr_median": -0.009727074943922265,
+      "r2_uniform": -0.0018371826043822813,
+      "r2_variance_weighted": -0.0018371826043822813,
+      "retrieval_top1": 0.0030239845304618493,
+      "retrieval_top5": 0.01502931523151493,
+      "retrieval_mrr": 0.02145598253804977,
+      "latent_corr_mean": 0.00551316685298328,
+      "pca_explained_variance": 0.7469957800139359
+    },
+    "train_mean": {
+      "roi_corr_mean": 5.466600786030179e-20,
+      "roi_corr_median": 7.120671876582945e-20,
+      "roi_corr_positive_frac": 0.49399999999999994,
+      "spatial_corr_mean": -0.000803696555466752,
+      "spatial_corr_median": -0.00046606686784996963,
+      "r2_uniform": 0.0,
+      "r2_variance_weighted": 0.0,
+      "retrieval_top1": 0.0037844530125037113,
+      "retrieval_top5": 0.018922265062518557,
+      "retrieval_mrr": 0.023283131284689108,
+      "latent_corr_mean": NaN,
+      "pca_explained_variance": NaN
+    }
+  }
+}

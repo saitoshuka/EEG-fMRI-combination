@@ -45,6 +45,32 @@ catd_reproduction/xp1/results/
 catd_reproduction/noddi/results/
 ```
 
+## Residual Prediction
+
+I also ran residual fMRI prediction. The residual target is:
+
+```text
+fMRI_residual = fMRI_true - fMRI_predicted_from_schedule_or_time
+```
+
+This asks whether EEG explains anything after removing the part already explained by task/block phase or run time.
+
+| Dataset | Residual model | Residual grid r mean | Residual spatial r mean | R2 weighted |
+| --- | --- | ---: | ---: | ---: |
+| XP1 all 53 runs | residual EEG ridge | -0.0039 | -0.0041 | -3.2100 |
+| XP1 all 53 runs | residual EEG shifted null | -0.0031 | -0.0028 | -1.2734 |
+| NODDI rest | residual EEG ridge | -0.0187 | 0.0385 | -0.1880 |
+| NODDI rest | residual EEG shifted null | -0.0006 | 0.0116 | -0.1106 |
+
+Residual outputs:
+
+```text
+catd_reproduction/xp1_all/results_residual/
+catd_reproduction/noddi/results_residual/
+```
+
+The residual result is the strongest negative evidence so far: after removing schedule/time, EEG prediction falls to null or worse. Under this audit setup, the apparent EEG-fMRI signal is largely explained by nuisance timing structure rather than EEG condition strength.
+
 ## Classification Red Flag
 
 On XP1 all tasks, a classifier trained on real training fMRI gets:
@@ -66,6 +92,8 @@ This audit does not prove fabrication. It does show that the paper's headline-st
 The main concern is XP1's block design. Rest and task alternate on a fixed 20 s schedule, and the same schedule exists across train/test subjects. A model can learn task/timing templates and achieve strong BOLD reconstruction/classification metrics without using EEG-to-fMRI neural correspondence. In this audit, the no-EEG schedule/time baseline is far stronger than EEG-only prediction.
 
 NODDI is less obviously label-confounded because it is resting-state, but a no-EEG time/run-position baseline still beats EEG-only prediction. EEG is above shifted-null, so there may be a real weak signal, but it is not strong enough here to justify very large claims without additional validation.
+
+After residualizing out schedule/time, EEG no longer predicts held-out residual fMRI in either XP1 or NODDI. That does not prove the paper fabricated results, but it does strongly support the concern that CATD-style scores can be dominated by timing priors and fMRI self-structure rather than EEG conditioning.
 
 ## Practical Verdict
 

@@ -545,6 +545,55 @@ def retrieval_metrics(y_true: np.ndarray, y_pred: np.ndarray, session: np.ndarra
     }
 
 
+def time_basis_features(
+    session: np.ndarray,
+    sample_index: np.ndarray,
+    time_sec: np.ndarray,
+    n_harmonics: int,
+) -> tuple[np.ndarray, list[str]]:
+    """Within-run time basis used as a no-EEG nuisance baseline."""
+    out = np.zeros((session.size, 3 + 2 * n_harmonics), dtype=np.float32)
+    for sess in np.unique(session):
+        idx = np.flatnonzero(session == sess)
+        if idx.size == 0:
+            continue
+        order = idx[np.argsort(sample_index[idx])]
+        t = time_sec[order]
+        denom = max(float(t[-1] - t[0]), 1e-6)
+        u = ((t - t[0]) / denom).astype(np.float32)
+        cols: list[np.ndarray] = [u, u**2, u**3]
+        for k in range(1, n_harmonics + 1):
+            cols.append(np.sin(2 * np.pi * k * u).astype(np.float32))
+            cols.append(np.cos(2 * np.pi * k * u).astype(np.float32))
+        out[order] = np.stack(cols, axis=1)
+    names = ["run_time", "run_time2", "run_time3"]
+    for k in range(1, n_harmonics + 1):
+        names.extend([f"run_time_sin{k}", f"run_time_cos{k}"])
+    return out, names
+
+
+def bold_autoregressive_features(
+    y: np.ndarray,
+    session: np.ndarray,
+    sample_index: np.ndarray,
+    lags: tuple[int, ...],
+) -> tuple[np.ndarray, list[str]]:
+    """Oracle previous-BOLD baseline; not an EEG-only deployable model."""
+    out = np.full((y.shape[0], y.shape[1] * len(lags)), np.nan, dtype=np.float32)
+    for sess in np.unique(session):
+        idx = np.flatnonzero(session == sess)
+        order = idx[np.argsort(sample_index[idx])]
+        for lag_i, lag in enumerate(lags):
+            if lag >= order.size:
+                continue
+            rows = order[lag:]
+            prev = order[:-lag]
+            start = lag_i * y.shape[1]
+            out[rows, start : start + y.shape[1]] = y[prev]
+    names = [f"bold_lag{lag}_roi{roi + 1:03d}" for lag in lags for roi in range(y.shape[1])]
+    return out, names
+
+
 def fit_predict_fold(
     x: np.ndarray,
     y: np.ndarray,
@@ -613,7 +662,16 @@ def evaluate(args: argparse.Namespace) -> Path:
     subject = loaded["subject"].astype(str)
     session = loaded["session"].astype(str)
     sample_index = loaded["sample_index"].astype(int)
+    time_sec = loaded["time_sec"].astype(np.float32)
     y_eval = zscore_targets_by_session(y, session)
+    time_x, _ = time_basis_features(
+        session=session,
+        sample_index=sample_index,
+        time_sec=time_sec,
+        n_harmonics=args.time_harmonics,
+    )
+    ar_lags = tuple(int(x) for x in args.bold_ar_lags.split(",") if x.strip())
+    ar_x, _ = bold_autoregressive_features(y_eval, session, sample_index, ar_lags)
 
     splits = make_splits(
         n_samples=x.shape[0],
@@ -641,6 +699,34 @@ def evaluate(args: argparse.Namespace) -> Path:
         mean_pred = np.repeat(train_mean, test_idx.size, axis=0)
         for model_name, pred, info in [("train_mean", mean_pred, {})]:
             rows.append(metric_row(fold, model_name, y_eval[test_idx], pred, session[test_idx], info, train_subjects, test_subjects))
+
+        if args.time_baseline:
+            time_pred, time_info = fit_predict_fold(
+                x=time_x,
+                y=y_eval,
+                train_idx=train_idx,
+                test_idx=test_idx,
+                target=args.target,
+                n_components=args.n_components,
+                alphas=alphas,
+                random_state=args.random_state + 200 + fold,
+                shuffled=False,
+            )
+            rows.append(metric_row(fold, f"time_only_ridge_{args.target}", y_eval[test_idx], time_pred, session[test_idx], time_info, train_subjects, test_subjects))
+
+        if args.bold_ar_baseline:
+            ar_pred, ar_info = fit_predict_fold(
+                x=ar_x,
+                y=y_eval,
+                train_idx=train_idx,
+                test_idx=test_idx,
+                target=args.target,
+                n_components=args.n_components,
+                alphas=alphas,
+                random_state=args.random_state + 300 + fold,
+                shuffled=False,
+            )
+            rows.append(metric_row(fold, f"bold_ar_oracle_ridge_{args.target}", y_eval[test_idx], ar_pred, session[test_idx], ar_info, train_subjects, test_subjects))
 
         pred, info = fit_predict_fold(
             x=x,
@@ -751,6 +837,10 @@ def summarize_rows(rows: list[dict[str, object]], args: argparse.Namespace) -> d
             "folds": args.folds,
             "group_by": args.group_by,
             "null": args.null,
+            "time_baseline": args.time_baseline,
+            "time_harmonics": args.time_harmonics,
+            "bold_ar_baseline": args.bold_ar_baseline,
+            "bold_ar_lags": args.bold_ar_lags,
         },
         "models": {},
     }
@@ -845,6 +935,7 @@ def write_report(args: argparse.Namespace, summary: dict[str, object], metrics_p
             "- Subject-level folds are used to avoid session leakage.",
             "- Targets are z-scored within each session before cross-validation, so results emphasize time-varying BOLD dynamics rather than subject/session mean offsets.",
             "- `shifted_null_*` trains on session-wise circularly shifted fMRI targets and is a conservative temporal-alignment sanity check.",
+            "- `time_only_*` uses only within-run time bases; `bold_ar_oracle_*` uses previous true fMRI volumes and is a non-deployable BOLD self-prior control.",
             "- This baseline is intentionally feature-based; a LabRAM-style model can reuse the same manifest, alignment, target PCA, and metrics.",
             "",
         ]
@@ -881,6 +972,10 @@ def add_eval_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--n-alphas", type=int, default=16)
     parser.add_argument("--random-state", type=int, default=42)
     parser.add_argument("--null", action="store_true")
+    parser.add_argument("--time-baseline", action="store_true")
+    parser.add_argument("--time-harmonics", type=int, default=8)
+    parser.add_argument("--bold-ar-baseline", action="store_true")
+    parser.add_argument("--bold-ar-lags", default="1,2,3")
 
 
 def make_parser() -> argparse.ArgumentParser:
