@@ -23,8 +23,12 @@ Thumbs.db
 
 # Derived feature caches can be regenerated from scripts.
 data/derived/
+data/pooled_v1/
+data/pooled_raw_v1*/
 results/**/*.npz
 results/**/cache/
+results/**/pid
+results/**/run.log
 
 # CATD reproduction local extracts and derived arrays.
 catd_reproduction/data/
