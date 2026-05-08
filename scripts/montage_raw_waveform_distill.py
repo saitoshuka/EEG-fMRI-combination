@@ -602,6 +602,9 @@ def run(args: argparse.Namespace) -> None:
     print(f"Using device: {args.device}", flush=True)
     if args.force_cache or not args.cache_path.exists():
         build_waveform_cache(args)
+    if args.cache_only:
+        print(json.dumps({"cache_path": str(args.cache_path), "cache_only": True}, indent=2), flush=True)
+        return
     cache = np.load(args.cache_path, allow_pickle=True)
     x_wave = cache["X_wave"]
     x_band = load_bandpower(args, cache)
@@ -706,6 +709,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--bandpower-path", type=Path, default=DEFAULT_BANDPOWER)
     p.add_argument("--results-dir", type=Path, default=DEFAULT_RESULTS)
     p.add_argument("--force-cache", action="store_true")
+    p.add_argument("--cache-only", action="store_true")
     p.add_argument("--device", default="auto")
     p.add_argument("--amp", action="store_true")
     p.add_argument("--seed", type=int, default=31)

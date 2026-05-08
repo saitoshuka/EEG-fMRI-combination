@@ -180,7 +180,7 @@ def window_bandpower_features(
     window_sec: float,
     batch_size: int,
     max_montage_channels: int,
-) -> tuple[np.ndarray, np.ndarray, list[str]]:
+) -> tuple[np.ndarray, np.ndarray, list[str], np.ndarray]:
     normed = [norm_channel(ch) for ch in channels]
     ch_to_raw = {}
     for i, ch in enumerate(normed):
@@ -227,7 +227,7 @@ def window_bandpower_features(
             np.nanquantile(rel, 0.75, axis=1),
         ]
         summary_feats.append(np.concatenate(stats, axis=1).astype(np.float32))
-    return np.concatenate(summary_feats, axis=0), np.concatenate(spatial_feats, axis=0), montage
+    return np.concatenate(summary_feats, axis=0), np.concatenate(spatial_feats, axis=0), montage, good
 
 
 def scalar(z: np.lib.npyio.NpzFile, key: str, default: str = "") -> str:
@@ -245,6 +245,7 @@ def build_features(args: argparse.Namespace) -> dict[str, dict[str, object]]:
         if args.max_runs > 0:
             files = files[: args.max_runs]
         x_sum, x_spat = [], []
+        z_targets, z_masks = [], []
         subjects, runs, sample_ids, time_frac = [], [], [], []
         qc_rows: list[QcRow] = []
         manifests = []
@@ -261,7 +262,7 @@ def build_features(args: argparse.Namespace) -> dict[str, dict[str, object]]:
                     tf_all = z["time_frac"].astype(np.float32)
                 else:
                     tf_all = np.linspace(0, 1, starts.size, dtype=np.float32)
-                sum_feat, spat_feat, montage = window_bandpower_features(
+                sum_feat, spat_feat, montage, good = window_bandpower_features(
                     raw,
                     channels,
                     starts,
@@ -275,10 +276,19 @@ def build_features(args: argparse.Namespace) -> dict[str, dict[str, object]]:
                 spat_feat = spat_feat[:n]
                 x_sum.append(sum_feat)
                 x_spat.append(spat_feat)
+                if "Y" in z.files:
+                    y = z["Y"].astype(np.float32)
+                    y = y[good[: y.shape[0]]][:n]
+                    z_targets.append(y)
+                if "Y_mask" in z.files:
+                    y_mask = z["Y_mask"].astype(np.float32)
+                    y_mask = y_mask[good[: y_mask.shape[0]]][:n]
+                    z_masks.append(y_mask)
+                tf_sel = tf_all[good[: tf_all.shape[0]]][:n]
                 subjects.extend([subject] * n)
                 runs.extend([run] * n)
                 sample_ids.extend(range(n))
-                time_frac.extend(tf_all[:n].tolist())
+                time_frac.extend(tf_sel.tolist())
                 qc_rows.append(compute_run_qc(raw, channels, sfreq, dataset, run, subject, n, args.max_montage_channels))
                 manifests.append(
                     {
@@ -309,8 +319,25 @@ def build_features(args: argparse.Namespace) -> dict[str, dict[str, object]]:
         }
         out_summary = args.feature_dir / f"{dataset}_summary_bandpower.npz"
         out_spatial = args.feature_dir / f"{dataset}_spatial_bandpower.npz"
-        np.savez_compressed(out_summary, X=np.concatenate(x_sum, axis=0).astype(np.float32), feature_mode="summary_bandpower", **common)
-        np.savez_compressed(out_spatial, X=np.concatenate(x_spat, axis=0).astype(np.float32), feature_mode="spatial_bandpower", **common)
+        target_payload = {}
+        if z_targets:
+            target_payload["Z"] = np.concatenate(z_targets, axis=0).astype(np.float32)
+        if z_masks:
+            target_payload["Z_mask"] = np.concatenate(z_masks, axis=0).astype(np.float32)
+        np.savez_compressed(
+            out_summary,
+            X=np.concatenate(x_sum, axis=0).astype(np.float32),
+            feature_mode="summary_bandpower",
+            **common,
+            **target_payload,
+        )
+        np.savez_compressed(
+            out_spatial,
+            X=np.concatenate(x_spat, axis=0).astype(np.float32),
+            feature_mode="spatial_bandpower",
+            **common,
+            **target_payload,
+        )
         with (args.feature_dir / f"{dataset}_qc.csv").open("w", newline="", encoding="utf-8") as handle:
             writer = csv.DictWriter(handle, fieldnames=list(QcRow.__annotations__.keys()), lineterminator="\n")
             writer.writeheader()
