@@ -1,0 +1,8 @@
+dataset,runs,subjects,windows,target_kinds,target_space_risk,lag_valid_windows,lag_valid_frac,channels_mean,labram_channels_min,labram_channels_mean,roi_mask_mean,roi_mask_min_across_runs,roi_temporal_std_mean
+Affective_music_listening_OpenNeuro_ds002725,21,21,19506,mni_proxy_ants_schaefer100,mni_proxy,19464,0.9978468163641956,46.0,31,31.0,1.0,1.0,0.9999999943233672
+Motor_imagery_neurofeedback_XP2_OpenNeuro_ds002338,17,17,5474,mni_proxy_ants_schaefer100,mni_proxy,5406,0.9875776397515528,64.0,63,63.0,0.8682353005689734,0.0,0.8682353005689734
+Multi_session_EEG_fMRI_experience_sampling_OpenNeuro_ds007216,24,24,7909,mni_proxy_ants_schaefer100,mni_proxy,7861,0.9939309647237324,31.0,31,31.0,1.0,1.0,1.0
+Sleep_rest_EEG_fMRI_OpenNeuro_ds003768,33,33,9273,mni_proxy_ants_schaefer100,mni_proxy,9207,0.9928825622775801,32.0,30,30.0,1.0,1.0,1.0
+Speeded_perceptual_judgments_confidence_OpenNeuro_ds002158,19,19,6883,mni_proxy_ants_schaefer100,mni_proxy,6823,0.9912828708412029,64.0,63,63.0,1.0,1.0,1.0
+gradCPT_simultaneous_EEG_fMRI_DTI_OpenNeuro_ds006040,28,28,3113,mni_proxy_ants_schaefer100,mni_proxy,3003,0.9646643109540636,64.0,63,63.0,1.0,1.0,1.0
+natview,22,22,5827,unknown_or_native,native_or_unknown,5746,0.986099193409988,56.36363636363637,45,56.36363636363637,1.0,1.0,1.0
