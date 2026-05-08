@@ -99,5 +99,8 @@ NatView one-fold result:
 | --- | ---: | ---: | ---: | --- |
 | Single-lag spatial distillation | 0.0221 | 0.0087 | 0.0083 | Earlier fold-1 run |
 | Five-lag spatial distillation | 0.0223 | -0.0081 | -0.0094 | Similar real r, much cleaner null separation |
+| Five-lag pooled 7-dataset training | 0.0182 | n/a | -0.0094 | 21,000 balanced training windows, worse than NatView-only |
 
 This did not materially raise the absolute NatView ROI correlation, but it made the control cleaner: the real EEG-fMRI alignment stays positive while circularly shifted fMRI supervision becomes negative. The next useful test is pooled multi-dataset training with the same five-lag memory, because the current result suggests the architecture can preserve alignment but may still be data-limited.
+
+The first pooled run did not support naive concatenation: even after unifying targets to Schaefer-100 and balancing each dataset to 3,000 windows, NatView held-out ROI r fell from 0.0223 to 0.0182. This points to dataset/domain shift as the next bottleneck, so the immediate follow-up should be pooled pretraining followed by NatView-specific fine-tuning rather than direct pooled evaluation.

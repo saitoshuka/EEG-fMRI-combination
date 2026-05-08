@@ -727,8 +727,14 @@ def eval_cmd(args: argparse.Namespace) -> None:
                 )
                 model, info = train_model(model, train_loader, val_loader, roi_coords, args)
                 if args.finetune_eval_epochs > 0:
+                    available_idx = np.fromiter(target_by_global.keys(), dtype=np.int64)
+                    ft_source_idx = np.intersect1d(single_train_idx, available_idx)
+                    if ft_source_idx.size < 50:
+                        raise RuntimeError(
+                            f"Not enough eval-dataset windows available for fine-tune after training caps: {ft_source_idx.size}"
+                        )
                     ft_fit_idx, ft_val_idx = subject_validation_split(
-                        single_train_idx, table["dataset"], table["subject"], args.seed + fold_id + 777
+                        ft_source_idx, table["dataset"], table["subject"], args.seed + fold_id + 777
                     )
                     ft_train_loader = DataLoader(
                         ds_obj,
