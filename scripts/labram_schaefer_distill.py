@@ -354,7 +354,9 @@ def train_model(model, train_loader, val_loader, roi_coords, args):
     if args.contrastive_queue_size > 0:
         queue = TargetContrastiveQueue(args.n_rois, args.contrastive_queue_size, device)
     best_state = None
+    best_score = -math.inf
     best_loss = math.inf
+    best_corr = -math.inf
     best_epoch = 0
     bad = 0
     for epoch in range(1, args.epochs + 1):
@@ -417,8 +419,9 @@ def train_model(model, train_loader, val_loader, roi_coords, args):
                 queue.add(queue_target, ds)
 
         model.eval()
-        val_loss_sum = 0.0
-        seen = 0
+        val_preds = []
+        val_targets = []
+        val_masks = []
         with torch.no_grad():
             for batch in val_loader:
                 if len(batch) == 6:
@@ -434,13 +437,22 @@ def train_model(model, train_loader, val_loader, roi_coords, args):
                     ds.to(device),
                     roi_coords,
                 )
-                val_loss_sum += float(masked_mse(pred, y.to(device), y_mask).detach().cpu()) * x.shape[0]
-                seen += x.shape[0]
-        val_loss = val_loss_sum / max(1, seen)
+                val_preds.append(pred.detach())
+                val_targets.append(y.to(device).detach())
+                if y_mask is not None:
+                    val_masks.append(y_mask.detach())
+        val_pred = torch.cat(val_preds, dim=0)
+        val_target = torch.cat(val_targets, dim=0)
+        val_mask = torch.cat(val_masks, dim=0) if val_masks else None
+        val_loss = float(masked_mse(val_pred, val_target, val_mask).detach().cpu())
+        val_corr = float(masked_corr_mean(val_pred, val_target, val_mask).detach().cpu())
+        score = val_corr if args.selection_metric == "corr" else -val_loss
         if args.verbose:
-            print(f"epoch={epoch:03d} val_mse={val_loss:.5f}", flush=True)
-        if val_loss < best_loss - args.min_delta:
+            print(f"epoch={epoch:03d} val_mse={val_loss:.5f} val_corr={val_corr:.5f}", flush=True)
+        if score > best_score + args.min_delta:
+            best_score = score
             best_loss = val_loss
+            best_corr = val_corr
             best_epoch = epoch
             best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
             bad = 0
@@ -450,7 +462,13 @@ def train_model(model, train_loader, val_loader, roi_coords, args):
             break
     if best_state is not None:
         model.load_state_dict(best_state)
-    return model, {"best_epoch": float(best_epoch), "best_val_mse": float(best_loss), "epochs_ran": float(epoch)}
+    return model, {
+        "best_epoch": float(best_epoch),
+        "best_val_mse": float(best_loss),
+        "best_val_corr": float(best_corr),
+        "best_selection_score": float(best_score),
+        "epochs_ran": float(epoch),
+    }
 
 
 def nanmean_or_nan(values: list[float]) -> float:
@@ -510,7 +528,15 @@ def write_outputs(rows: list[dict[str, object]], args: argparse.Namespace) -> No
         selected = [r for r in rows if (str(r["eval_dataset"]), str(r["model"])) == key]
         summary["models"]["/".join(key)] = {
             m: nanmean_or_nan([float(r.get(m, math.nan)) for r in selected])
-            for m in ["roi_corr_mean", "spatial_corr_mean", "r2_variance_weighted", "latent_corr_mean", "residual_latent_corr_mean", "best_val_mse"]
+            for m in [
+                "roi_corr_mean",
+                "spatial_corr_mean",
+                "r2_variance_weighted",
+                "latent_corr_mean",
+                "residual_latent_corr_mean",
+                "best_val_mse",
+                "best_val_corr",
+            ]
         }
     (args.out_dir / "summary.json").write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
 
@@ -834,6 +860,7 @@ def parse_args() -> argparse.Namespace:
     p_eval.add_argument("--geometry-sigma", type=float, default=0.45)
     p_eval.add_argument("--grad-clip", type=float, default=1.0)
     p_eval.add_argument("--min-delta", type=float, default=1e-4)
+    p_eval.add_argument("--selection-metric", choices=["mse", "corr"], default="mse")
     p_eval.add_argument("--window-sec", type=float, default=8.0)
     p_eval.add_argument("--patch-sec", type=float, default=1.0)
     p_eval.add_argument("--resample-hz", type=float, default=200.0)
