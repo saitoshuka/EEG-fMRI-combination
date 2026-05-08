@@ -8,6 +8,7 @@ __pycache__/
 
 # Third-party model repositories cloned locally.
 external/LaBraM/
+external/NeuroSTORM/
 
 # Large local data and download state.
 downloads/paired_datasets/
@@ -25,7 +26,10 @@ Thumbs.db
 data/derived/
 data/pooled_v1/
 data/pooled_raw_v1*/
+data/pooled_raw_schaefer100_mni_proxy*/
+data/mni_schaefer100_proxy*/
 data/labram_frozen_v1*/
+data/neurostorm*/
 results/**/*.npz
 results/**/cache/
 results/**/pid

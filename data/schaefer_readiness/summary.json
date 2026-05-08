@@ -1,0 +1,8 @@
+{
+  "needs_mni_preprocessing": 7,
+  "fmri_only_visible": 3,
+  "archives_need_unpack_or_loader": 8,
+  "not_ready": 1,
+  "ready_schaefer100": 1,
+  "eeg_only_visible": 1
+}
