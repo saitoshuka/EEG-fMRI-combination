@@ -535,7 +535,7 @@ def fit_ridge_baselines(
 def write_outputs(args: argparse.Namespace, rows: list[MetricRow], meta: dict[str, object]) -> None:
     args.results_dir.mkdir(parents=True, exist_ok=True)
     with (args.results_dir / "metrics.csv").open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(MetricRow.__annotations__.keys()))
+        writer = csv.DictWriter(handle, fieldnames=list(MetricRow.__annotations__.keys()), lineterminator="\n")
         writer.writeheader()
         writer.writerows(asdict(row) for row in rows)
 

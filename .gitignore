@@ -35,6 +35,7 @@ data/pooled_raw_schaefer100_mni_proxy*/
 data/mni_schaefer100_proxy*/
 data/labram_frozen_v1*/
 data/neurostorm*/
+data/eeg_raw_bandpower_controls*/
 results/**/*.npz
 results/**/cache/
 results/**/pid
