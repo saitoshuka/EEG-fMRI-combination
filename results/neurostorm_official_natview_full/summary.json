@@ -1,0 +1,10 @@
+{
+  "selected": 22,
+  "built": 22,
+  "errors": 0,
+  "total_windows": 5811,
+  "preprocess_kind": "mni152_2mm_tr0p8_crop96_bgmin_runznorm_v2",
+  "mean_windows_per_run": 264.1363636363636,
+  "min_windows_per_run": 193,
+  "max_windows_per_run": 283
+}
