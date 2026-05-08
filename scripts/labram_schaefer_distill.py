@@ -89,6 +89,25 @@ def build_roi_table(runs, include_dataset: set[str] | None, n_rois: int) -> dict
     }
 
 
+def make_target_masks(runs, table: dict[str, np.ndarray], indices: np.ndarray, n_rois: int) -> np.ndarray:
+    masks = np.ones((indices.size, n_rois), dtype=np.float32)
+    cache: dict[int, np.ndarray] = {}
+    for row, global_idx in enumerate(indices):
+        rid = int(table["run_id"][global_idx])
+        sample = int(table["sample_id"][global_idx])
+        if rid not in cache:
+            z = np.load(runs[rid].path, allow_pickle=True)
+            if "Y_mask" in z.files:
+                arr = z["Y_mask"].astype(np.float32)
+                if arr.ndim == 1:
+                    arr = np.broadcast_to(arr.reshape(1, -1), runs[rid].y.shape).astype(np.float32)
+                cache[rid] = arr[:, :n_rois]
+            else:
+                cache[rid] = np.ones((runs[rid].y.shape[0], n_rois), dtype=np.float32)
+        masks[row] = cache[rid][sample]
+    return masks
+
+
 def schaefer100_coords(resolution_mm: int = 2) -> np.ndarray:
     from nilearn import datasets
 
@@ -145,19 +164,151 @@ def geometry_smoothness_loss(model: nn.Module, coords: torch.Tensor, input_chans
     return (w * d_emb).sum() / w.sum().clamp_min(1e-6)
 
 
+def masked_mse(pred: torch.Tensor, target: torch.Tensor, mask: torch.Tensor | None = None) -> torch.Tensor:
+    if mask is None:
+        return F.mse_loss(pred, target)
+    mask = mask.to(dtype=pred.dtype)
+    return ((pred - target).square() * mask).sum() / mask.sum().clamp_min(1.0)
+
+
+def masked_corr_mean(pred: torch.Tensor, target: torch.Tensor, mask: torch.Tensor | None = None) -> torch.Tensor:
+    if mask is None:
+        pred_c = pred - pred.mean(0, keepdim=True)
+        target_c = target - target.mean(0, keepdim=True)
+        corr = (pred_c * target_c).sum(0) / torch.sqrt((pred_c.square().sum(0) * target_c.square().sum(0)).clamp_min(1e-6))
+        return corr.mean()
+    mask = mask.to(dtype=pred.dtype)
+    n = mask.sum(0)
+    valid = n > 1.5
+    if not bool(valid.any()):
+        return pred.new_zeros(())
+    pred_mean = (pred * mask).sum(0) / n.clamp_min(1.0)
+    target_mean = (target * mask).sum(0) / n.clamp_min(1.0)
+    pred_c = (pred - pred_mean) * mask
+    target_c = (target - target_mean) * mask
+    corr = (pred_c * target_c).sum(0) / torch.sqrt((pred_c.square().sum(0) * target_c.square().sum(0)).clamp_min(1e-6))
+    return corr[valid].mean()
+
+
+def masked_contrastive_loss(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    mask: torch.Tensor | None,
+    ds: torch.Tensor,
+    temp: float,
+    min_items: int,
+) -> torch.Tensor:
+    if mask is None:
+        return map_contrastive_loss(pred, target, ds, temp, min_items)
+    mask = mask.to(dtype=pred.dtype)
+    scale = torch.sqrt(torch.tensor(pred.shape[1], device=pred.device, dtype=pred.dtype) / mask.sum(1, keepdim=True).clamp_min(1.0))
+    return map_contrastive_loss(pred * mask * scale, target * mask * scale, ds, temp, min_items)
+
+
+class TargetContrastiveQueue:
+    def __init__(self, dim: int, capacity: int, device: torch.device):
+        self.capacity = int(capacity)
+        self.target = torch.zeros((self.capacity, dim), dtype=torch.float32, device=device)
+        self.ds = torch.zeros((self.capacity,), dtype=torch.long, device=device)
+        self.ptr = 0
+        self.size = 0
+
+    def add(self, target: torch.Tensor, ds: torch.Tensor) -> None:
+        if self.capacity <= 0 or target.numel() == 0:
+            return
+        target = target.detach().float()
+        ds = ds.detach().long()
+        if target.shape[0] >= self.capacity:
+            self.target.copy_(target[-self.capacity :])
+            self.ds.copy_(ds[-self.capacity :])
+            self.ptr = 0
+            self.size = self.capacity
+            return
+        n = target.shape[0]
+        end = self.ptr + n
+        if end <= self.capacity:
+            self.target[self.ptr : end] = target
+            self.ds[self.ptr : end] = ds
+        else:
+            first = self.capacity - self.ptr
+            self.target[self.ptr :] = target[:first]
+            self.ds[self.ptr :] = ds[:first]
+            self.target[: end - self.capacity] = target[first:]
+            self.ds[: end - self.capacity] = ds[first:]
+        self.ptr = end % self.capacity
+        self.size = min(self.capacity, self.size + n)
+
+    def candidates(self, did: torch.Tensor) -> torch.Tensor:
+        if self.size <= 0:
+            return self.target[:0]
+        idx = torch.nonzero(self.ds[: self.size] == did, as_tuple=True)[0]
+        return self.target[: self.size][idx]
+
+
+def apply_roi_mask_for_contrastive(
+    pred: torch.Tensor, target: torch.Tensor, mask: torch.Tensor | None
+) -> tuple[torch.Tensor, torch.Tensor]:
+    if mask is None:
+        return pred, target
+    mask = mask.to(dtype=pred.dtype)
+    scale = torch.sqrt(torch.tensor(pred.shape[1], device=pred.device, dtype=pred.dtype) / mask.sum(1, keepdim=True).clamp_min(1.0))
+    return pred * mask * scale, target * mask * scale
+
+
+def queued_masked_contrastive_loss(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    mask: torch.Tensor | None,
+    ds: torch.Tensor,
+    temp: float,
+    min_items: int,
+    queue: TargetContrastiveQueue,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    pred_z, target_z = apply_roi_mask_for_contrastive(pred, target, mask)
+    losses = []
+    counts = []
+    for did in torch.unique(ds):
+        idx = torch.nonzero(ds == did, as_tuple=True)[0]
+        if idx.numel() < 2:
+            continue
+        queued = queue.candidates(did)
+        candidates = torch.cat([target_z[idx].detach().float(), queued], dim=0)
+        if candidates.shape[0] < min_items:
+            continue
+        logits = (F.normalize(pred_z[idx].float(), dim=-1) @ F.normalize(candidates, dim=-1).T) / max(temp, 1e-4)
+        labels = torch.arange(idx.numel(), device=pred.device)
+        losses.append(F.cross_entropy(logits, labels))
+        counts.append(float(idx.numel()))
+    if not losses:
+        loss = pred.new_zeros(())
+    else:
+        weights = pred.new_tensor(counts)
+        weights = weights / weights.sum()
+        loss = torch.stack(losses).mul(weights).sum()
+    return loss, target_z.detach()
+
+
 def train_model(model, train_loader, val_loader, roi_coords, args):
     device = torch.device(args.device)
     model.to(device)
     roi_coords = roi_coords.to(device)
     opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=args.lr, weight_decay=args.weight_decay)
     scaler = torch.amp.GradScaler("cuda", enabled=args.amp and device.type == "cuda")
+    queue = None
+    if args.contrastive_queue_size > 0:
+        queue = TargetContrastiveQueue(args.n_rois, args.contrastive_queue_size, device)
     best_state = None
     best_loss = math.inf
     best_epoch = 0
     bad = 0
     for epoch in range(1, args.epochs + 1):
         model.train()
-        for x, coords, input_chans, ds, y in train_loader:
+        for batch in train_loader:
+            if len(batch) == 6:
+                x, coords, input_chans, ds, y, y_mask = batch
+            else:
+                x, coords, input_chans, ds, y = batch
+                y_mask = None
             x, coords, input_chans, ds, y = (
                 x.to(device),
                 coords.to(device),
@@ -165,18 +316,24 @@ def train_model(model, train_loader, val_loader, roi_coords, args):
                 ds.to(device),
                 y.to(device),
             )
+            if y_mask is not None:
+                y_mask = y_mask.to(device)
             opt.zero_grad(set_to_none=True)
             with torch.amp.autocast("cuda", enabled=args.amp and device.type == "cuda"):
                 pred = model(x, coords, input_chans, ds, roi_coords)
-                mse = F.mse_loss(pred, y)
-                pred_c = pred - pred.mean(0, keepdim=True)
-                y_c = y - y.mean(0, keepdim=True)
-                corr = (pred_c * y_c).sum(0) / torch.sqrt((pred_c.square().sum(0) * y_c.square().sum(0)).clamp_min(1e-6))
-                loss = mse - args.corr_weight * corr.mean()
+                mse = masked_mse(pred, y, y_mask)
+                loss = mse - args.corr_weight * masked_corr_mean(pred, y, y_mask)
+                queue_target = None
                 if args.contrastive_weight > 0:
-                    loss = loss + args.contrastive_weight * map_contrastive_loss(
-                        pred, y, ds, args.contrastive_temp, args.contrastive_min_items
-                    )
+                    if queue is None:
+                        loss = loss + args.contrastive_weight * masked_contrastive_loss(
+                            pred, y, y_mask, ds, args.contrastive_temp, args.contrastive_min_items
+                        )
+                    else:
+                        con_loss, queue_target = queued_masked_contrastive_loss(
+                            pred, y, y_mask, ds, args.contrastive_temp, args.contrastive_min_items, queue
+                        )
+                        loss = loss + args.contrastive_weight * con_loss
                 if args.geometry_weight > 0:
                     loss = loss + args.geometry_weight * geometry_smoothness_loss(
                         model, coords, input_chans, args.geometry_sigma
@@ -187,12 +344,20 @@ def train_model(model, train_loader, val_loader, roi_coords, args):
                 nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad], args.grad_clip)
             scaler.step(opt)
             scaler.update()
+            if queue is not None and queue_target is not None:
+                queue.add(queue_target, ds)
 
         model.eval()
         val_loss_sum = 0.0
         seen = 0
         with torch.no_grad():
-            for x, coords, input_chans, ds, y in val_loader:
+            for batch in val_loader:
+                if len(batch) == 6:
+                    x, coords, input_chans, ds, y, y_mask = batch
+                    y_mask = y_mask.to(device)
+                else:
+                    x, coords, input_chans, ds, y = batch
+                    y_mask = None
                 pred = model(
                     x.to(device),
                     coords.to(device),
@@ -200,7 +365,7 @@ def train_model(model, train_loader, val_loader, roi_coords, args):
                     ds.to(device),
                     roi_coords,
                 )
-                val_loss_sum += float(F.mse_loss(pred, y.to(device)).detach().cpu()) * x.shape[0]
+                val_loss_sum += float(masked_mse(pred, y.to(device), y_mask).detach().cpu()) * x.shape[0]
                 seen += x.shape[0]
         val_loss = val_loss_sum / max(1, seen)
         if args.verbose:
@@ -223,6 +388,19 @@ def nanmean_or_nan(values: list[float]) -> float:
     arr = np.asarray(values, dtype=np.float64)
     arr = arr[np.isfinite(arr)]
     return math.nan if arr.size == 0 else float(arr.mean())
+
+
+def cap_by_dataset(train_idx: np.ndarray, table: dict[str, np.ndarray], cap: int, seed: int) -> np.ndarray:
+    if cap <= 0:
+        return train_idx
+    rng = np.random.default_rng(seed)
+    kept = []
+    for ds in sorted(set(table["dataset"][train_idx].astype(str))):
+        vals = train_idx[table["dataset"][train_idx] == ds]
+        if vals.size > cap:
+            vals = np.sort(rng.choice(vals, size=cap, replace=False))
+        kept.append(vals)
+    return np.sort(np.concatenate(kept)) if kept else train_idx
 
 
 def write_outputs(rows: list[dict[str, object]], args: argparse.Namespace) -> None:
@@ -295,13 +473,17 @@ def eval_cmd(args: argparse.Namespace) -> None:
     dataset_to_id = {ds: i for i, ds in enumerate(dataset_names)}
     all_idx = np.arange(table["dataset"].shape[0], dtype=np.int64)
     y_all = make_targets(runs, table, all_idx)[:, : args.n_rois]
+    mask_all = make_target_masks(runs, table, all_idx, args.n_rois)
     roi_coords = torch.from_numpy(schaefer100_coords(args.schaefer_resolution_mm))
     window_samples = int(round(args.window_sec * args.resample_hz))
     patch_samples = int(round(args.patch_sec * args.resample_hz))
     args.out_dir.mkdir(parents=True, exist_ok=True)
     rows: list[dict[str, object]] = []
 
+    eval_filter = set(args.eval_dataset) if getattr(args, "eval_dataset", None) else None
     for eval_dataset in dataset_names:
+        if eval_filter is not None and eval_dataset not in eval_filter:
+            continue
         eval_subject = table["subject"][table["dataset"] == eval_dataset]
         if len(set(eval_subject.astype(str))) < 3:
             continue
@@ -337,8 +519,8 @@ def eval_cmd(args: argparse.Namespace) -> None:
                     }
                 )
 
-            variants = [(False, False)]
-            if args.null:
+            variants = [] if args.only_residual_target else [(False, False)]
+            if args.null and not args.only_residual_target:
                 variants.append((True, False))
             if args.residual_target:
                 variants.append((False, True))
@@ -346,30 +528,35 @@ def eval_cmd(args: argparse.Namespace) -> None:
                     variants.append((True, True))
             for shifted, residual in variants:
                 train_idx = np.flatnonzero(pooled_train_mask)
+                train_idx = cap_by_dataset(train_idx, table, args.max_train_windows_per_dataset, args.seed + fold_id)
                 if args.max_train_windows > 0 and train_idx.size > args.max_train_windows:
                     rng = np.random.default_rng(args.seed + fold_id)
                     train_idx = np.sort(rng.choice(train_idx, size=args.max_train_windows, replace=False))
                 fit_idx, val_idx = subject_validation_split(train_idx, table["dataset"], table["subject"], args.seed + fold_id)
                 target_by_global: dict[int, np.ndarray] = {}
+                mask_by_global: dict[int, np.ndarray] = {}
                 time_models = {}
                 for ds_name in dataset_names:
                     ds_train = train_idx[table["dataset"][train_idx] == ds_name]
                     y = y_all[ds_train].copy()
+                    m = mask_all[ds_train].copy()
                     if residual:
                         time_models[ds_name] = fit_time_ridge(runs, table, ds_train, y, args.time_harmonics)
                         y = y - predict_time_ridge(time_models[ds_name], runs, table, ds_train, args.time_harmonics)
                     if shifted:
                         y = session_shift(y, table["session"][ds_train], args.seed + 1000 + fold_id)
-                    for idx, yy in zip(ds_train, y, strict=True):
+                    for idx, yy, mm in zip(ds_train, y, m, strict=True):
                         target_by_global[int(idx)] = yy.astype(np.float32)
+                        mask_by_global[int(idx)] = mm.astype(np.float32)
                 if residual:
                     y_time_test = predict_time_ridge(time_models[eval_dataset], runs, table, test_idx, args.time_harmonics)
                     y_eval_target = y_test - y_time_test
                 else:
                     y_time_test = np.zeros_like(y_test)
                     y_eval_target = y_test
-                for idx, yy in zip(test_idx, y_eval_target, strict=True):
+                for idx, yy, mm in zip(test_idx, y_eval_target, mask_all[test_idx], strict=True):
                     target_by_global[int(idx)] = yy.astype(np.float32)
+                    mask_by_global[int(idx)] = mm.astype(np.float32)
 
                 ds_obj = DistillDataset(
                     runs,
@@ -378,6 +565,7 @@ def eval_cmd(args: argparse.Namespace) -> None:
                     run_meta,
                     dataset_to_id,
                     target_by_global,
+                    mask_by_global,
                     window_samples,
                     patch_samples,
                     args.window_zscore,
@@ -434,6 +622,48 @@ def eval_cmd(args: argparse.Namespace) -> None:
                     flush=True,
                 )
                 model, info = train_model(model, train_loader, val_loader, roi_coords, args)
+                if args.finetune_eval_epochs > 0:
+                    ft_fit_idx, ft_val_idx = subject_validation_split(
+                        single_train_idx, table["dataset"], table["subject"], args.seed + fold_id + 777
+                    )
+                    ft_train_loader = DataLoader(
+                        ds_obj,
+                        batch_sampler=SameRunBatchSampler(
+                            ft_fit_idx, table["run_id"], args.batch_size, True, args.seed + fold_id + 1777
+                        ),
+                        num_workers=0,
+                        collate_fn=collate_same_run,
+                    )
+                    ft_val_loader = DataLoader(
+                        ds_obj,
+                        batch_sampler=SameRunBatchSampler(
+                            ft_val_idx, table["run_id"], args.batch_size, False, args.seed + fold_id + 1777
+                        ),
+                        num_workers=0,
+                        collate_fn=collate_same_run,
+                    )
+                    ft_args = argparse.Namespace(**vars(args))
+                    ft_args.epochs = args.finetune_eval_epochs
+                    ft_args.lr = args.lr * args.finetune_lr_scale
+                    ft_args.patience = args.finetune_patience
+                    if args.verbose:
+                        print(
+                            f"finetune eval_dataset={eval_dataset} model={model_name} "
+                            f"n_train={ft_fit_idx.size} n_val={ft_val_idx.size} lr={ft_args.lr:g}",
+                            flush=True,
+                        )
+                    model, ft_info = train_model(model, ft_train_loader, ft_val_loader, roi_coords, ft_args)
+                    info = {
+                        "best_epoch": ft_info["best_epoch"],
+                        "best_val_mse": ft_info["best_val_mse"],
+                        "epochs_ran": info["epochs_ran"] + ft_info["epochs_ran"],
+                        "pretrain_best_epoch": info["best_epoch"],
+                        "pretrain_best_val_mse": info["best_val_mse"],
+                        "pretrain_epochs_ran": info["epochs_ran"],
+                        "finetune_best_epoch": ft_info["best_epoch"],
+                        "finetune_best_val_mse": ft_info["best_val_mse"],
+                        "finetune_epochs_ran": ft_info["epochs_ran"],
+                    }
                 y_model_pred = predict_model(model, test_loader, roi_coords, args)
                 y_pred = y_time_test + y_model_pred if residual else y_model_pred
                 residual_corr = column_corr(y_eval_target, y_model_pred) if residual else np.full(y_test.shape[1], np.nan)
@@ -465,6 +695,7 @@ def parse_args() -> argparse.Namespace:
     p_eval.add_argument("--out-dir", type=Path, default=DEFAULT_RESULTS)
     p_eval.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT)
     p_eval.add_argument("--include-dataset", action="append", default=["natview"])
+    p_eval.add_argument("--eval-dataset", action="append", default=[])
     p_eval.add_argument("--device", default="auto")
     p_eval.add_argument("--amp", action="store_true")
     p_eval.add_argument("--folds", type=int, default=3)
@@ -482,6 +713,7 @@ def parse_args() -> argparse.Namespace:
     p_eval.add_argument("--contrastive-weight", type=float, default=0.02)
     p_eval.add_argument("--contrastive-temp", type=float, default=0.07)
     p_eval.add_argument("--contrastive-min-items", type=int, default=4)
+    p_eval.add_argument("--contrastive-queue-size", type=int, default=0)
     p_eval.add_argument("--geometry-weight", type=float, default=0.01)
     p_eval.add_argument("--geometry-sigma", type=float, default=0.45)
     p_eval.add_argument("--grad-clip", type=float, default=1.0)
@@ -499,10 +731,15 @@ def parse_args() -> argparse.Namespace:
     p_eval.add_argument("--unfreeze-pos-embed", action="store_true")
     p_eval.add_argument("--unfreeze-time-embed", action="store_true")
     p_eval.add_argument("--max-train-windows", type=int, default=0)
+    p_eval.add_argument("--max-train-windows-per-dataset", type=int, default=0)
     p_eval.add_argument("--seed", type=int, default=31)
     p_eval.add_argument("--null", action="store_true")
     p_eval.add_argument("--time-baseline", action="store_true")
     p_eval.add_argument("--residual-target", action="store_true")
+    p_eval.add_argument("--only-residual-target", action="store_true")
+    p_eval.add_argument("--finetune-eval-epochs", type=int, default=0)
+    p_eval.add_argument("--finetune-lr-scale", type=float, default=1.0)
+    p_eval.add_argument("--finetune-patience", type=int, default=2)
     p_eval.add_argument("--time-harmonics", type=int, default=6)
     p_eval.add_argument("--verbose", action="store_true")
     p_eval.set_defaults(func=eval_cmd)
@@ -511,6 +748,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    if getattr(args, "only_residual_target", False) and not getattr(args, "residual_target", False):
+        raise SystemExit("--only-residual-target requires --residual-target")
     args.func(args)
 
 

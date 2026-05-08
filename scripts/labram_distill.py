@@ -135,6 +135,7 @@ class DistillDataset(Dataset):
         run_meta: dict[int, dict[str, object]],
         dataset_to_id: dict[str, int],
         targets_by_global: dict[int, np.ndarray],
+        masks_by_global: dict[int, np.ndarray] | None,
         window_samples: int,
         patch_samples: int,
         window_zscore: bool,
@@ -145,6 +146,7 @@ class DistillDataset(Dataset):
         self.run_meta = run_meta
         self.dataset_to_id = dataset_to_id
         self.targets_by_global = targets_by_global
+        self.masks_by_global = masks_by_global
         self.window_samples = int(window_samples)
         self.patch_samples = int(patch_samples)
         self.n_patches = self.window_samples // self.patch_samples
@@ -165,13 +167,16 @@ class DistillDataset(Dataset):
             std = window.std(axis=-1, keepdims=True)
             window = (window - mean) / np.maximum(std, 1e-6)
         window = window.reshape(window.shape[0], self.n_patches, self.patch_samples)
-        return (
+        item = (
             torch.from_numpy(window),
             torch.from_numpy(meta["coords"]),  # type: ignore[arg-type]
             meta["input_chans"],  # type: ignore[index]
             torch.tensor(self.dataset_to_id[run.dataset], dtype=torch.long),
             torch.from_numpy(self.targets_by_global[global_idx].astype(np.float32)),
         )
+        if self.masks_by_global is None:
+            return item
+        return (*item, torch.from_numpy(self.masks_by_global[global_idx].astype(np.float32)))
 
 
 def collate_same_run(batch):
@@ -180,6 +185,9 @@ def collate_same_run(batch):
     coords = torch.stack([item[1] for item in batch])
     ds = torch.stack([item[3] for item in batch])
     y = torch.stack([item[4] for item in batch])
+    if len(batch[0]) > 5:
+        y_mask = torch.stack([item[5] for item in batch])
+        return x, coords, input_chans, ds, y, y_mask
     return x, coords, input_chans, ds, y
 
 
@@ -356,7 +364,8 @@ def predict_model(model, loader, fmri_coords, args) -> np.ndarray:
     preds = []
     model.eval()
     with torch.no_grad():
-        for x, coords, input_chans, ds, _ in loader:
+        for batch in loader:
+            x, coords, input_chans, ds = batch[:4]
             pred = model(x.to(device), coords.to(device), input_chans.to(device), ds.to(device), fmri_coords)
             preds.append(pred.cpu().numpy())
     return np.concatenate(preds, axis=0)
@@ -470,6 +479,7 @@ def eval_cmd(args: argparse.Namespace) -> None:
                     run_meta,
                     dataset_to_id,
                     target_by_global,
+                    None,
                     window_samples,
                     patch_samples,
                     args.window_zscore,
