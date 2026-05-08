@@ -1,0 +1,295 @@
+{
+  "config": {
+    "feature": [],
+    "results_dir": "results/eeg_positive_controls_v1",
+    "seed": 31,
+    "folds": 3,
+    "max_folds": 3,
+    "max_samples": 0,
+    "x_pca_dim": 128,
+    "time_bins": 8,
+    "test_frac": 0.25,
+    "block_size": 64,
+    "gap": 8,
+    "min_train_per_run": 20,
+    "min_test_per_run": 10,
+    "autocorr_lags": [
+      1,
+      4,
+      16,
+      64
+    ],
+    "max_pairs_per_run": 1000
+  },
+  "meta": {
+    "affective": {
+      "path": "/home/sudaxin/projects/paired_data/data/labram_retrieval_schaefer100_affective/features.npz",
+      "n_samples": 19506,
+      "x_dim": 600,
+      "n_subjects": 21,
+      "n_runs": 21,
+      "within_run_folds": 3,
+      "subject_folds": 3
+    },
+    "sleep": {
+      "path": "/home/sudaxin/projects/paired_data/data/labram_retrieval_schaefer100_sleep/features.npz",
+      "n_samples": 9273,
+      "x_dim": 600,
+      "n_subjects": 33,
+      "n_runs": 33,
+      "within_run_folds": 3,
+      "subject_folds": 3
+    },
+    "natview_neurostorm": {
+      "path": "/home/sudaxin/projects/paired_data/data/labram_neurostorm_retrieval_natview_labram_eeg/features.npz",
+      "n_samples": 5811,
+      "x_dim": 600,
+      "n_subjects": 22,
+      "n_runs": 22,
+      "within_run_folds": 3,
+      "subject_folds": 3
+    }
+  },
+  "aggregate": {
+    "affective/subject_id_from_eeg/within_run_block": {
+      "score_mean": 0.9686906582764588,
+      "score_std": 0.002241082755099256,
+      "chance_mean": 0.047619047619047616,
+      "aux_mean": 0.9681450707213816,
+      "aux_std": 0.00216725771932584,
+      "n": 3.0
+    },
+    "affective/run_id_from_eeg/within_run_block": {
+      "score_mean": 0.9686906582764588,
+      "score_std": 0.002241082755099256,
+      "chance_mean": 0.047619047619047616,
+      "aux_mean": 0.9681450707213816,
+      "aux_std": 0.00216725771932584,
+      "n": 3.0
+    },
+    "affective/time_bin_from_eeg/within_run_block": {
+      "score_mean": 0.12615397566560693,
+      "score_std": 0.007851641495322149,
+      "chance_mean": 0.125,
+      "aux_mean": 0.12927240505415538,
+      "aux_std": 0.010958095150151602,
+      "n": 3.0
+    },
+    "affective/time_frac_from_eeg/within_run_block": {
+      "score_mean": 0.291272377079405,
+      "score_std": 0.028660532751682632,
+      "chance_mean": 0.0,
+      "aux_mean": 0.05265657107035319,
+      "aux_std": 0.029025114932281732,
+      "n": 3.0
+    },
+    "affective/time_bin_from_eeg/subject_heldout": {
+      "score_mean": 0.1675061090011265,
+      "score_std": 0.004770408327136466,
+      "chance_mean": 0.125,
+      "aux_mean": 0.16764233431734712,
+      "aux_std": 0.0048412693528660415,
+      "n": 3.0
+    },
+    "affective/time_frac_from_eeg/subject_heldout": {
+      "score_mean": 0.1812286972033819,
+      "score_std": 0.057026945854152626,
+      "chance_mean": 0.0,
+      "aux_mean": -0.19951645533243814,
+      "aux_std": 0.03966801368605841,
+      "n": 3.0
+    },
+    "affective/temporal_autocorr_lag1/no_train": {
+      "score_mean": 0.8573157364047105,
+      "score_std": 0.0,
+      "chance_mean": 0.42197451049404,
+      "aux_mean": 0.4353412259106705,
+      "aux_std": 0.0,
+      "n": 1.0
+    },
+    "affective/temporal_autocorr_lag4/no_train": {
+      "score_mean": 0.5533884325744859,
+      "score_std": 0.0,
+      "chance_mean": 0.42225281817280197,
+      "aux_mean": 0.13113561440168392,
+      "aux_std": 0.0,
+      "n": 1.0
+    },
+    "affective/temporal_autocorr_lag16/no_train": {
+      "score_mean": 0.5161463296515219,
+      "score_std": 0.0,
+      "chance_mean": 0.4210464934900846,
+      "aux_mean": 0.09509983616143725,
+      "aux_std": 0.0,
+      "n": 1.0
+    },
+    "affective/temporal_autocorr_lag64/no_train": {
+      "score_mean": 0.48604950911029116,
+      "score_std": 0.0,
+      "chance_mean": 0.42220561276640534,
+      "aux_mean": 0.06384389634388582,
+      "aux_std": 0.0,
+      "n": 1.0
+    },
+    "sleep/subject_id_from_eeg/within_run_block": {
+      "score_mean": 0.9428661616161617,
+      "score_std": 0.033792211120614174,
+      "chance_mean": 0.030303030303030304,
+      "aux_mean": 0.9348023638516031,
+      "aux_std": 0.039381792735239014,
+      "n": 3.0
+    },
+    "sleep/run_id_from_eeg/within_run_block": {
+      "score_mean": 0.9428661616161617,
+      "score_std": 0.033792211120614174,
+      "chance_mean": 0.030303030303030304,
+      "aux_mean": 0.9348023638516031,
+      "aux_std": 0.039381792735239014,
+      "n": 3.0
+    },
+    "sleep/time_bin_from_eeg/within_run_block": {
+      "score_mean": 0.0629744373795229,
+      "score_std": 0.007702945976500872,
+      "chance_mean": 0.125,
+      "aux_mean": 0.07500137672062285,
+      "aux_std": 0.02521542273886764,
+      "n": 3.0
+    },
+    "sleep/time_frac_from_eeg/within_run_block": {
+      "score_mean": 0.14833646375847884,
+      "score_std": 0.07309971660228139,
+      "chance_mean": 0.0,
+      "aux_mean": -0.1577830712000529,
+      "aux_std": 0.10317281414181922,
+      "n": 3.0
+    },
+    "sleep/time_bin_from_eeg/subject_heldout": {
+      "score_mean": 0.16804353054353052,
+      "score_std": 0.007620537694210393,
+      "chance_mean": 0.125,
+      "aux_mean": 0.16920090585571013,
+      "aux_std": 0.007741978257650198,
+      "n": 3.0
+    },
+    "sleep/time_frac_from_eeg/subject_heldout": {
+      "score_mean": 0.13816784311968153,
+      "score_std": 0.08151913483253359,
+      "chance_mean": 0.0,
+      "aux_mean": -1.5493462085723877,
+      "aux_std": 0.752316330025777,
+      "n": 3.0
+    },
+    "sleep/temporal_autocorr_lag1/no_train": {
+      "score_mean": 0.9526054382563979,
+      "score_std": 0.0,
+      "chance_mean": 0.7970697734289035,
+      "aux_mean": 0.15553566482749437,
+      "aux_std": 0.0,
+      "n": 1.0
+    },
+    "sleep/temporal_autocorr_lag4/no_train": {
+      "score_mean": 0.934702149787383,
+      "score_std": 0.0,
+      "chance_mean": 0.7876150722574303,
+      "aux_mean": 0.14708707752995265,
+      "aux_std": 0.0,
+      "n": 1.0
+    },
+    "sleep/temporal_autocorr_lag16/no_train": {
+      "score_mean": 0.8939170386015916,
+      "score_std": 0.0,
+      "chance_mean": 0.7863954873589452,
+      "aux_mean": 0.1075215512426464,
+      "aux_std": 0.0,
+      "n": 1.0
+    },
+    "sleep/temporal_autocorr_lag64/no_train": {
+      "score_mean": 0.8378718551953869,
+      "score_std": 0.0,
+      "chance_mean": 0.7977260144108567,
+      "aux_mean": 0.04014584078453021,
+      "aux_std": 0.0,
+      "n": 1.0
+    },
+    "natview_neurostorm/subject_id_from_eeg/within_run_block": {
+      "score_mean": 0.9564183501683502,
+      "score_std": 0.005782065702161231,
+      "chance_mean": 0.04545454545454545,
+      "aux_mean": 0.9533840863040345,
+      "aux_std": 0.005768472647892549,
+      "n": 3.0
+    },
+    "natview_neurostorm/run_id_from_eeg/within_run_block": {
+      "score_mean": 0.9555292508417508,
+      "score_std": 0.005273233748522168,
+      "chance_mean": 0.04545454545454545,
+      "aux_mean": 0.9520907308076572,
+      "aux_std": 0.0045578924303768436,
+      "n": 3.0
+    },
+    "natview_neurostorm/time_bin_from_eeg/within_run_block": {
+      "score_mean": 0.04874253871987302,
+      "score_std": 0.009233312477301473,
+      "chance_mean": 0.125,
+      "aux_mean": 0.049635441695293374,
+      "aux_std": 0.01124757869358808,
+      "n": 3.0
+    },
+    "natview_neurostorm/time_frac_from_eeg/within_run_block": {
+      "score_mean": -0.4228935513056707,
+      "score_std": 0.08494589534972592,
+      "chance_mean": 0.0,
+      "aux_mean": -0.5532521804173788,
+      "aux_std": 0.04728528912927569,
+      "n": 3.0
+    },
+    "natview_neurostorm/time_bin_from_eeg/subject_heldout": {
+      "score_mean": 0.1315120760424925,
+      "score_std": 0.005085160520943261,
+      "chance_mean": 0.125,
+      "aux_mean": 0.13181011427921455,
+      "aux_std": 0.004890108866112853,
+      "n": 3.0
+    },
+    "natview_neurostorm/time_frac_from_eeg/subject_heldout": {
+      "score_mean": 0.022483294904377168,
+      "score_std": 0.029264246733242915,
+      "chance_mean": 0.0,
+      "aux_mean": -0.10389749209086101,
+      "aux_std": 0.04646670376435194,
+      "n": 3.0
+    },
+    "natview_neurostorm/temporal_autocorr_lag1/no_train": {
+      "score_mean": 0.6684455872259197,
+      "score_std": 0.0,
+      "chance_mean": 0.4444127100688712,
+      "aux_mean": 0.22403287715704856,
+      "aux_std": 0.0,
+      "n": 1.0
+    },
+    "natview_neurostorm/temporal_autocorr_lag4/no_train": {
+      "score_mean": 0.5266942538997081,
+      "score_std": 0.0,
+      "chance_mean": 0.4415326969330887,
+      "aux_mean": 0.08516155696661942,
+      "aux_std": 0.0,
+      "n": 1.0
+    },
+    "natview_neurostorm/temporal_autocorr_lag16/no_train": {
+      "score_mean": 0.4890508501685819,
+      "score_std": 0.0,
+      "chance_mean": 0.44360413687759176,
+      "aux_mean": 0.04544671329099015,
+      "aux_std": 0.0,
+      "n": 1.0
+    },
+    "natview_neurostorm/temporal_autocorr_lag64/no_train": {
+      "score_mean": 0.4471489591030104,
+      "score_std": 0.0,
+      "chance_mean": 0.440443889428218,
+      "aux_mean": 0.006705069674792397,
+      "aux_std": 0.0,
+      "n": 1.0
+    }
+  }
+}
