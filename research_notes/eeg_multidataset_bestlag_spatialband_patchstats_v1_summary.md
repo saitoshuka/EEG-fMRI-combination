@@ -125,3 +125,23 @@ than naive pooling: shared EEG encoder, dataset embeddings or adapters, common
 Schaefer decoder, and per-dataset loss balancing.  That is more likely to keep
 the positive Affective/XP2/Experience signal without letting weak/noisy datasets
 wash it out.
+
+## Dataset-Embedding Follow-Up
+
+After the first report, I added a `--dataset-embed` option to
+`scripts/tribe_style_eeg_fmri.py`.  The model adds a learned dataset embedding
+to every token in the temporal context.  This was a quick test of whether simple
+domain conditioning can rescue pooled training.
+
+| cache | dataset embed | longctx real rank | shifted-null rank | delta |
+| --- | --- | ---: | ---: | ---: |
+| pooled3 patchstats | no | 0.5296 | 0.4980 | 0.0316 |
+| pooled3 patchstats | yes | 0.5304 | 0.5002 | 0.0302 |
+| pooled7 spatial bandpower | no | 0.5028 | 0.5004 | 0.0024 |
+| pooled7 spatial bandpower | yes | 0.5020 | 0.5004 | 0.0016 |
+
+Conclusion: a plain dataset embedding is not enough.  It slightly changes pooled3
+but does not rescue pooled7.  The next pooled approach should use stronger
+domain handling: dataset-balanced batches, dataset adapters or low-rank
+dataset-specific heads, and probably exclusion/downweighting of datasets whose
+own controls are near-null.

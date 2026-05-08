@@ -79,19 +79,21 @@ class SequenceDataset(Dataset):
         seq_idx: np.ndarray,
         target_idx: np.ndarray,
         subject_id: np.ndarray,
+        dataset_id: np.ndarray,
     ) -> None:
         self.x = x
         self.y = y
         self.seq_idx = torch.as_tensor(seq_idx, dtype=torch.long)
         self.target_idx = torch.as_tensor(target_idx, dtype=torch.long)
         self.subject_id = torch.as_tensor(subject_id, dtype=torch.long)
+        self.dataset_id = torch.as_tensor(dataset_id, dtype=torch.long)
 
     def __len__(self) -> int:
         return int(self.target_idx.numel())
 
-    def __getitem__(self, item: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def __getitem__(self, item: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         target = self.target_idx[item]
-        return self.x[self.seq_idx[item]], self.y[target], self.subject_id[target]
+        return self.x[self.seq_idx[item]], self.y[target], self.subject_id[target], self.dataset_id[target]
 
 
 class LowRankContextModel(nn.Module):
@@ -107,10 +109,13 @@ class LowRankContextModel(nn.Module):
         heads: int,
         dropout: float,
         subject_bias: bool,
+        n_datasets: int,
+        dataset_embed: bool,
     ) -> None:
         super().__init__()
         self.input = nn.Sequential(nn.LayerNorm(x_dim), nn.Linear(x_dim, hidden_dim))
         self.pos = nn.Parameter(torch.zeros(1, context_steps, hidden_dim))
+        self.dataset_embed = nn.Embedding(n_datasets, hidden_dim) if dataset_embed else None
         layer = nn.TransformerEncoderLayer(
             d_model=hidden_dim,
             nhead=heads,
@@ -131,11 +136,20 @@ class LowRankContextModel(nn.Module):
         self.decoder = nn.Linear(latent_dim, y_dim, bias=True)
         self.subject_bias = nn.Embedding(n_subjects, y_dim) if subject_bias else None
         nn.init.normal_(self.pos, std=0.02)
+        if self.dataset_embed is not None:
+            nn.init.normal_(self.dataset_embed.weight, std=0.02)
         if self.subject_bias is not None:
             nn.init.zeros_(self.subject_bias.weight)
 
-    def forward(self, x: torch.Tensor, subject_id: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self,
+        x: torch.Tensor,
+        subject_id: torch.Tensor,
+        dataset_id: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         h = self.input(x) + self.pos[:, : x.shape[1]]
+        if self.dataset_embed is not None:
+            h = h + self.dataset_embed(dataset_id)[:, None, :]
         h = self.encoder(h)
         pooled = h[:, -1]
         latent = self.to_latent(pooled)
@@ -432,13 +446,15 @@ def train_neural(
     test_seq: np.ndarray,
     subject_ids: np.ndarray,
     n_subjects: int,
+    dataset_ids: np.ndarray,
+    n_datasets: int,
 ) -> np.ndarray:
     device = torch.device(args.device)
     x_t = torch.from_numpy(x_scaled.astype(np.float32))
     y_t = torch.from_numpy(y_train_space.astype(np.float32))
-    train_ds = SequenceDataset(x_t, y_t, seq_idx, target_idx, subject_ids)
+    train_ds = SequenceDataset(x_t, y_t, seq_idx, target_idx, subject_ids, dataset_ids)
     test_y_t = torch.from_numpy(y_space.astype(np.float32))
-    test_ds = SequenceDataset(x_t, test_y_t, seq_idx, target_idx, subject_ids)
+    test_ds = SequenceDataset(x_t, test_y_t, seq_idx, target_idx, subject_ids, dataset_ids)
     generator = torch.Generator().manual_seed(args.seed)
     train_loader = DataLoader(
         torch.utils.data.Subset(train_ds, train_seq.tolist()),
@@ -459,6 +475,8 @@ def train_neural(
         heads=args.heads,
         dropout=args.dropout,
         subject_bias=not args.no_subject_bias,
+        n_datasets=n_datasets,
+        dataset_embed=args.dataset_embed,
     ).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     total_steps = max(1, args.epochs * max(1, len(train_loader)))
@@ -471,13 +489,14 @@ def train_neural(
     for epoch in range(1, args.epochs + 1):
         model.train()
         losses = []
-        for xb, yb, sb in train_loader:
+        for xb, yb, sb, db in train_loader:
             xb = xb.to(device, non_blocking=True)
             yb = yb.to(device, non_blocking=True)
             sb = sb.to(device, non_blocking=True)
+            db = db.to(device, non_blocking=True)
             opt.zero_grad(set_to_none=True)
             with torch.amp.autocast("cuda", enabled=args.amp and args.device == "cuda"):
-                pred, _ = model(xb, sb)
+                pred, _ = model(xb, sb, db)
                 loss = F.mse_loss(pred, yb)
                 if args.corr_weight > 0:
                     loss = loss + args.corr_weight * corr_loss(pred, yb)
@@ -514,10 +533,11 @@ def train_neural(
     )
     preds = []
     with torch.inference_mode():
-        for xb, _, sb in test_loader:
+        for xb, _, sb, db in test_loader:
             xb = xb.to(device, non_blocking=True)
             sb = sb.to(device, non_blocking=True)
-            pred, _ = model(xb, sb)
+            db = db.to(device, non_blocking=True)
+            pred, _ = model(xb, sb, db)
             preds.append(pred.cpu().numpy().astype(np.float32))
     return np.concatenate(preds, axis=0)
 
@@ -612,6 +632,14 @@ def run(args: argparse.Namespace) -> None:
     run_id = z["run"].astype(str)
     sample_id = z["sample_id"].astype(np.int32)
     time_frac = z["time_frac"].astype(np.float32)
+    if "dataset" in z.files:
+        dataset_arr = z["dataset"]
+        if dataset_arr.shape == ():
+            dataset = np.asarray([str(dataset_arr.item())] * x.shape[0], dtype="U64")
+        else:
+            dataset = dataset_arr.astype(str)
+    else:
+        dataset = np.asarray(["dataset"] * x.shape[0], dtype="U64")
     if args.max_samples > 0:
         keep = np.arange(min(args.max_samples, x.shape[0]))
         x = x[keep]
@@ -620,6 +648,7 @@ def run(args: argparse.Namespace) -> None:
         run_id = run_id[keep]
         sample_id = sample_id[keep]
         time_frac = time_frac[keep]
+        dataset = dataset[keep]
 
     y = zscore_detrend_by_run(y_raw, run_id, degree=args.detrend_degree)
     seq_idx, target_idx = build_sequence_index(
@@ -632,6 +661,9 @@ def run(args: argparse.Namespace) -> None:
     subjects = sorted(set(subject.astype(str)))
     subject_to_id = {s: i for i, s in enumerate(subjects)}
     subject_ids = np.asarray([subject_to_id[s] for s in subject.astype(str)], dtype=np.int64)
+    datasets = sorted(set(dataset.astype(str)))
+    dataset_to_id = {s: i for i, s in enumerate(datasets)}
+    dataset_ids = np.asarray([dataset_to_id[s] for s in dataset.astype(str)], dtype=np.int64)
 
     if args.split_mode == "within_run_block":
         folds = make_within_run_block_folds(
@@ -670,6 +702,8 @@ def run(args: argparse.Namespace) -> None:
                 "n_sequences": int(seq_idx.shape[0]),
                 "n_runs": int(len(set(run_id.astype(str)))),
                 "n_subjects": int(len(subjects)),
+                "n_datasets": int(len(datasets)),
+                "dataset_embed": bool(args.dataset_embed),
                 "x_dim": int(x.shape[1]),
                 "y_raw_dim": int(y_raw.shape[1]),
                 "target_space": target_space,
@@ -715,6 +749,8 @@ def run(args: argparse.Namespace) -> None:
                 test_seq=test_seq,
                 subject_ids=subject_ids,
                 n_subjects=len(subjects),
+                dataset_ids=dataset_ids,
+                n_datasets=len(datasets),
             )
             add_metrics(rows, fold, "longctx_lowrank_transformer", mode, train_seq.size, pred, true, run_id, test_target, args.context_steps)
 
@@ -750,6 +786,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--heads", type=int, default=4)
     p.add_argument("--dropout", type=float, default=0.1)
     p.add_argument("--no-subject-bias", action="store_true")
+    p.add_argument("--dataset-embed", action="store_true")
     p.add_argument("--epochs", type=int, default=16)
     p.add_argument("--patience", type=int, default=4)
     p.add_argument("--batch-size", type=int, default=192)
