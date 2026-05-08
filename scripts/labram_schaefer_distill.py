@@ -709,6 +709,8 @@ def eval_cmd(args: argparse.Namespace) -> None:
                     layers=args.layers,
                     dropout=args.dropout,
                     max_lags=max(16, len(args.lag_offsets_samples)),
+                    bandpower_aux=args.bandpower_aux,
+                    resample_hz=args.resample_hz,
                 )
                 model_name = (
                     "schaefer_residual_shifted_null"
@@ -836,6 +838,7 @@ def parse_args() -> argparse.Namespace:
     p_eval.add_argument("--patch-sec", type=float, default=1.0)
     p_eval.add_argument("--resample-hz", type=float, default=200.0)
     p_eval.add_argument("--lag-offset-sec", action="append", type=float, default=[])
+    p_eval.add_argument("--bandpower-aux", action="store_true")
     p_eval.add_argument("--n-rois", type=int, default=100)
     p_eval.add_argument("--schaefer-resolution-mm", type=int, default=2)
     p_eval.add_argument("--min-channels", type=int, default=16)

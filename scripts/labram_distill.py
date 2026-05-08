@@ -217,11 +217,21 @@ class LaBraMSpatialDistiller(nn.Module):
         layers: int,
         dropout: float,
         max_lags: int = 16,
+        bandpower_aux: bool = False,
+        resample_hz: float = 200.0,
     ):
         super().__init__()
         self.labram = labram
         self.token_proj = nn.Linear(token_dim, d_model)
         self.lag_embed = nn.Parameter(torch.zeros(max_lags, d_model))
+        self.bandpower_aux = bool(bandpower_aux)
+        self.resample_hz = float(resample_hz)
+        self.band_edges = ((1.0, 4.0), (4.0, 8.0), (8.0, 13.0), (13.0, 30.0), (30.0, 55.0))
+        self.band_proj = (
+            nn.Sequential(nn.LayerNorm(len(self.band_edges)), nn.Linear(len(self.band_edges), d_model), nn.GELU(), nn.Linear(d_model, d_model))
+            if self.bandpower_aux
+            else None
+        )
         self.eeg_coord = nn.Sequential(nn.Linear(3, d_model), nn.GELU(), nn.Linear(d_model, d_model))
         self.fmri_coord = nn.Sequential(nn.Linear(3, d_model), nn.GELU(), nn.Linear(d_model, d_model))
         self.dataset_embed = nn.Embedding(n_datasets, d_model)
@@ -244,7 +254,29 @@ class LaBraMSpatialDistiller(nn.Module):
         self.out = nn.Linear(d_model, 1)
         nn.init.trunc_normal_(self.lag_embed, std=0.02)
 
+    def _bandpower_features(self, x: torch.Tensor) -> torch.Tensor:
+        data = x.unsqueeze(1) if x.dim() == 4 else x
+        batch, n_lags, n_ch, n_patches, patch_samples = data.shape
+        n_times = n_patches * patch_samples
+        flat = data.reshape(batch, n_lags, n_ch, n_times).float()
+        flat = flat - flat.mean(dim=-1, keepdim=True)
+        window = torch.hann_window(n_times, device=flat.device, dtype=flat.dtype).view(1, 1, 1, -1)
+        psd = torch.fft.rfft(flat * window, dim=-1).abs().square()
+        freqs = torch.fft.rfftfreq(n_times, d=1.0 / self.resample_hz, device=flat.device)
+        feats = []
+        for lo, hi in self.band_edges:
+            mask = (freqs >= lo) & (freqs < hi)
+            if not bool(mask.any()):
+                feats.append(torch.zeros((batch, n_lags, n_ch), device=flat.device, dtype=flat.dtype))
+            else:
+                feats.append(torch.log(psd[..., mask].mean(dim=-1).clamp_min(1e-12)))
+        band = torch.stack(feats, dim=-1)
+        mean = band.mean(dim=(1, 2), keepdim=True)
+        std = band.std(dim=(1, 2), keepdim=True).clamp_min(1e-6)
+        return ((band - mean) / std).to(dtype=x.dtype)
+
     def forward(self, x, coords, input_chans, ds, fmri_coords, return_aux: bool = False):
+        band_features = self._bandpower_features(x) if self.bandpower_aux else None
         if x.dim() == 5:
             batch, n_lags, n_ch, _, _ = x.shape
             if n_lags > self.lag_embed.shape[0]:
@@ -257,6 +289,8 @@ class LaBraMSpatialDistiller(nn.Module):
             eeg_coord = self.eeg_coord(coords).unsqueeze(1)
             lag_coord = self.lag_embed[:n_lags].view(1, n_lags, 1, -1)
             memory = self.token_proj(ch_tokens) + eeg_coord + lag_coord
+            if band_features is not None and self.band_proj is not None:
+                memory = memory + self.band_proj(band_features)
             memory = memory.reshape(batch, n_lags * n_ch, -1)
         else:
             tokens = self.labram.forward_features(x, input_chans=input_chans, return_all_tokens=True)
@@ -265,6 +299,8 @@ class LaBraMSpatialDistiller(nn.Module):
             n_patch = patch_tokens.shape[1] // n_ch
             ch_tokens = patch_tokens.reshape(x.shape[0], n_ch, n_patch, patch_tokens.shape[-1]).mean(dim=2)
             memory = self.token_proj(ch_tokens) + self.eeg_coord(coords)
+            if band_features is not None and self.band_proj is not None:
+                memory = memory + self.band_proj(band_features[:, 0])
         memory = self.eeg_encoder(memory)
         q = self.fmri_coord(fmri_coords).unsqueeze(0).expand(x.shape[0], -1, -1)
         q = q + self.dataset_embed(ds).unsqueeze(1)

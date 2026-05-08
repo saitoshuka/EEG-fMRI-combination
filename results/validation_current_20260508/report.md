@@ -99,9 +99,12 @@ NatView one-fold result:
 | --- | ---: | ---: | ---: | --- |
 | Single-lag spatial distillation | 0.0221 | 0.0087 | 0.0083 | Earlier fold-1 run |
 | Five-lag spatial distillation | 0.0223 | -0.0081 | -0.0094 | Similar real r, much cleaner null separation |
+| Five-lag hybrid raw+bandpower distillation | 0.0290 | -0.0280 | -0.0094 | Best fold-1 ROI r so far; R2 still negative |
 | Five-lag pooled 7-dataset training | 0.0182 | n/a | -0.0094 | 21,000 balanced training windows, worse than NatView-only |
 | Five-lag pooled pretrain + NatView fine-tune | 0.0099 | n/a | -0.0094 | NatView validation MSE improved, held-out subjects worsened |
 
 This did not materially raise the absolute NatView ROI correlation, but it made the control cleaner: the real EEG-fMRI alignment stays positive while circularly shifted fMRI supervision becomes negative. The next useful test is pooled multi-dataset training with the same five-lag memory, because the current result suggests the architecture can preserve alignment but may still be data-limited.
+
+Adding online bandpower features to each lag-by-channel LaBraM token produced the strongest fold-1 temporal correlation so far: ROI r rose to 0.0290 while shifted-null fell to -0.0280. This supports the user's hunch that raw waveform tokens alone are not enough here; the useful signal is easier to expose when LaBraM tokens are paired with explicit time-frequency summaries. The caveat is that R2 remains negative, so the model is ranking temporal variation better than it is calibrating fMRI amplitude.
 
 The first pooled run did not support naive concatenation: even after unifying targets to Schaefer-100 and balancing each dataset to 3,000 windows, NatView held-out ROI r fell from 0.0223 to 0.0182. Pooled pretraining followed by NatView-specific fine-tuning also failed held-out subjects: NatView validation MSE improved strongly, but test ROI r fell to 0.0099. This points to subject/domain overfitting rather than a simple lack of training data.
