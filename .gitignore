@@ -36,6 +36,7 @@ data/mni_schaefer100_proxy*/
 data/labram_frozen_v1*/
 data/neurostorm*/
 data/eeg_raw_bandpower_controls*/
+data/montage_waveform*/
 results/**/*.npz
 results/**/cache/
 results/**/pid
