@@ -1,0 +1,10 @@
+{
+  "source_cache": "data/pooled_raw_schaefer100_neurostorm_official_natview/run_cache",
+  "out_cache": "data/pooled_raw_schaefer100_neurostorm_official_natview_labram_eeg/run_cache",
+  "preprocess_kind": "natview_eeglab_bandpass0p1-75_powerline_notch_resample200_uV_v1",
+  "runs": 22,
+  "ok": 22,
+  "errors": 0,
+  "total_windows": 5811,
+  "mean_channels": 56.36363636363637
+}
