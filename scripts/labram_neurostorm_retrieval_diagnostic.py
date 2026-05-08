@@ -339,6 +339,7 @@ def evaluate(args: argparse.Namespace) -> None:
     y_flat = z["Z"].astype(np.float32)
     subject = z["subject"].astype(str)
     run = z["run"].astype(str)
+    sample_id = z["sample_id"].astype(np.int32)
     time_frac = z["time_frac"].astype(np.float32)
     if args.split_mode == "subject":
         folds = []
@@ -369,6 +370,48 @@ def evaluate(args: argparse.Namespace) -> None:
             train_idx = np.concatenate(train_parts)
             test_idx = np.concatenate(test_parts)
             folds.append((fold_id, train_idx, test_idx, np.asarray([f"within_run_random_{fold_id}"])))
+    elif args.split_mode == "within_run_block":
+        folds = []
+        n_splits = args.max_folds if args.max_folds > 0 else args.folds
+        for fold_id in range(1, n_splits + 1):
+            rng = np.random.default_rng(args.seed + fold_id * 2011)
+            train_parts = []
+            test_parts = []
+            for r in sorted(set(run.astype(str))):
+                idx = np.where(run.astype(str) == r)[0]
+                if idx.size < max(10, args.block_windows * 2):
+                    continue
+                idx = idx[np.argsort(sample_id[idx])]
+                blocks = [idx[start : start + args.block_windows] for start in range(0, idx.size, args.block_windows)]
+                blocks = [block for block in blocks if block.size >= max(5, args.block_windows // 3)]
+                if len(blocks) < 2:
+                    continue
+                n_test_blocks = max(1, int(round(len(blocks) * args.within_run_test_frac)))
+                test_block_ids = set(rng.choice(np.arange(len(blocks)), size=min(n_test_blocks, len(blocks) - 1), replace=False).tolist())
+                test_local = []
+                train_local = []
+                for block_id, block in enumerate(blocks):
+                    if block_id in test_block_ids:
+                        test_local.append(block)
+                    else:
+                        train_local.append(block)
+                test_idx_run = np.concatenate(test_local)
+                train_candidates = np.concatenate(train_local)
+                if args.block_gap_windows > 0:
+                    keep = np.ones(train_candidates.shape[0], dtype=bool)
+                    cand_samples = sample_id[train_candidates]
+                    for block in test_local:
+                        lo = int(sample_id[block].min())
+                        hi = int(sample_id[block].max())
+                        keep &= ~((cand_samples >= lo - args.block_gap_windows) & (cand_samples <= hi + args.block_gap_windows))
+                    train_candidates = train_candidates[keep]
+                if train_candidates.size < 10 or test_idx_run.size < 5:
+                    continue
+                train_parts.append(np.sort(train_candidates))
+                test_parts.append(np.sort(test_idx_run))
+            train_idx = np.concatenate(train_parts)
+            test_idx = np.concatenate(test_parts)
+            folds.append((fold_id, train_idx, test_idx, np.asarray([f"within_run_block_{fold_id}"])))
     else:
         raise ValueError(f"Unknown split mode: {args.split_mode}")
 
@@ -577,8 +620,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--min-windows", type=int, default=20)
     p.add_argument("--folds", type=int, default=3)
     p.add_argument("--max-folds", type=int, default=1)
-    p.add_argument("--split-mode", choices=["subject", "within_run_random"], default="subject")
+    p.add_argument("--split-mode", choices=["subject", "within_run_random", "within_run_block"], default="subject")
     p.add_argument("--within-run-test-frac", type=float, default=0.33)
+    p.add_argument("--block-windows", type=int, default=24)
+    p.add_argument("--block-gap-windows", type=int, default=4)
     p.add_argument("--x-pca-dim", type=int, default=128)
     p.add_argument("--target-pca-dim", type=int, default=64)
     p.add_argument("--pls-components", type=int, default=16)
