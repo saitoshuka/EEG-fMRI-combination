@@ -9,6 +9,8 @@ __pycache__/
 # Third-party model repositories cloned locally.
 external/LaBraM/
 external/NeuroSTORM/
+external/tribev2/
+external/tribev2_paper/
 
 # Large local data and download state.
 downloads/paired_datasets/
