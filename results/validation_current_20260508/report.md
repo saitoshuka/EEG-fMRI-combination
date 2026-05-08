@@ -51,3 +51,21 @@ Before larger-GPU training, require all of the following on NatView subject-held
 3. Keep ROI mask loss for partial-coverage datasets, but do not treat it as a performance fix by itself.
 4. Use multi-dataset data only after the NatView anchor is positive; naive concatenation currently hurts.
 5. Treat NeuroSTORM/fMRI teacher latents as a second-stage target only after the Schaefer-100 anchor passes controls.
+
+## Addendum: Spatial Distillation
+
+A stronger spatial distillation variant was added after the initial negative LaBraM runs:
+
+- ROI spatial correlation-matrix loss: match the ROI-by-ROI correlation structure of predicted Schaefer-100 activity to the true fMRI target within each training batch.
+- Attention geometry loss: make ROI queries attend to EEG channels according to a soft electrode-to-ROI geometry prior, so the bridge cannot remain purely name/id based.
+- Existing masked MSE, ROI temporal correlation, contrastive queue, and electrode positional smoothness were retained.
+
+NatView subject-heldout direct Schaefer-100 results improved:
+
+| Setting | Folds | Real ROI r | Shifted-null ROI r | Time baseline ROI r | Note |
+| --- | ---: | ---: | ---: | ---: | --- |
+| NatView-only contrastive queue, before spatial distillation | 1 | 0.0074 | 0.0177 | 0.0083 | Failed null |
+| NatView spatial distillation | 1 | 0.0221 | 0.0087 | 0.0083 | Passed direct null/time on this split |
+| NatView spatial distillation | 3 | 0.0215 | 0.0124 | -0.0070 | First multi-fold LaBraM direct run above null |
+
+This is a useful positive signal, but still not enough to declare success. The residual-target spatial-distillation split remained weaker than residual shifted-null, so the current model is learning some fMRI spatially structured signal, but not yet a clean residual EEG-to-fMRI mapping.

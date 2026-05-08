@@ -205,6 +205,57 @@ def masked_contrastive_loss(
     return map_contrastive_loss(pred * mask * scale, target * mask * scale, ds, temp, min_items)
 
 
+def masked_spatial_corrmat_loss(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    mask: torch.Tensor | None,
+    min_items: int,
+) -> torch.Tensor:
+    if pred.shape[0] < min_items or pred.shape[1] < 2:
+        return pred.new_zeros(())
+    if mask is None:
+        mask = torch.ones_like(target)
+    mask = mask.to(dtype=pred.dtype)
+    valid = mask.sum(0) >= float(min_items)
+    if int(valid.sum().detach().cpu()) < 2:
+        return pred.new_zeros(())
+
+    def corrmat(x: torch.Tensor) -> torch.Tensor:
+        x = x[:, valid]
+        m = mask[:, valid]
+        mean = (x * m).sum(0, keepdim=True) / m.sum(0, keepdim=True).clamp_min(1.0)
+        xc = (x - mean) * m
+        z = xc / torch.sqrt(xc.square().sum(0, keepdim=True).clamp_min(1e-6))
+        return z.T @ z
+
+    pred_corr = corrmat(pred.float())
+    target_corr = corrmat(target.float())
+    pair = ~torch.eye(pred_corr.shape[0], dtype=torch.bool, device=pred_corr.device)
+    return (pred_corr[pair] - target_corr[pair]).square().mean()
+
+
+def attention_geometry_alignment_loss(
+    attn: torch.Tensor | None,
+    coords: torch.Tensor,
+    roi_coords: torch.Tensor,
+    roi_mask: torch.Tensor | None,
+    sigma: float,
+) -> torch.Tensor:
+    if attn is None or attn.numel() == 0:
+        return coords.new_zeros(())
+    electrode_xyz = coords[0].float()
+    roi_xyz = roi_coords.float()
+    dist = torch.cdist(roi_xyz, electrode_xyz).square()
+    prior = F.softmax(-dist / max(2.0 * sigma * sigma, 1e-6), dim=-1)
+    attn_prob = attn.float().clamp_min(1e-6)
+    attn_prob = attn_prob / attn_prob.sum(-1, keepdim=True).clamp_min(1e-6)
+    ce = -(prior.unsqueeze(0) * attn_prob.log()).sum(-1)
+    if roi_mask is not None:
+        weight = roi_mask.to(dtype=ce.dtype)
+        return (ce * weight).sum() / weight.sum().clamp_min(1.0)
+    return ce.mean()
+
+
 class TargetContrastiveQueue:
     def __init__(self, dim: int, capacity: int, device: torch.device):
         self.capacity = int(capacity)
@@ -320,9 +371,22 @@ def train_model(model, train_loader, val_loader, roi_coords, args):
                 y_mask = y_mask.to(device)
             opt.zero_grad(set_to_none=True)
             with torch.amp.autocast("cuda", enabled=args.amp and device.type == "cuda"):
-                pred = model(x, coords, input_chans, ds, roi_coords)
+                need_aux = args.spatial_corrmat_weight > 0 or args.attention_geometry_weight > 0
+                out = model(x, coords, input_chans, ds, roi_coords, return_aux=need_aux)
+                if need_aux:
+                    pred, aux = out
+                else:
+                    pred, aux = out, {}
                 mse = masked_mse(pred, y, y_mask)
                 loss = mse - args.corr_weight * masked_corr_mean(pred, y, y_mask)
+                if args.spatial_corrmat_weight > 0:
+                    loss = loss + args.spatial_corrmat_weight * masked_spatial_corrmat_loss(
+                        pred, y, y_mask, args.spatial_corrmat_min_items
+                    )
+                if args.attention_geometry_weight > 0:
+                    loss = loss + args.attention_geometry_weight * attention_geometry_alignment_loss(
+                        aux.get("attn"), coords, roi_coords, y_mask, args.attention_geometry_sigma
+                    )
                 queue_target = None
                 if args.contrastive_weight > 0:
                     if queue is None:
@@ -714,6 +778,10 @@ def parse_args() -> argparse.Namespace:
     p_eval.add_argument("--contrastive-temp", type=float, default=0.07)
     p_eval.add_argument("--contrastive-min-items", type=int, default=4)
     p_eval.add_argument("--contrastive-queue-size", type=int, default=0)
+    p_eval.add_argument("--spatial-corrmat-weight", type=float, default=0.0)
+    p_eval.add_argument("--spatial-corrmat-min-items", type=int, default=8)
+    p_eval.add_argument("--attention-geometry-weight", type=float, default=0.0)
+    p_eval.add_argument("--attention-geometry-sigma", type=float, default=0.8)
     p_eval.add_argument("--geometry-weight", type=float, default=0.01)
     p_eval.add_argument("--geometry-sigma", type=float, default=0.45)
     p_eval.add_argument("--grad-clip", type=float, default=1.0)

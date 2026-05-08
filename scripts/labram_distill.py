@@ -226,7 +226,7 @@ class LaBraMSpatialDistiller(nn.Module):
         self.ffn = nn.Sequential(nn.Linear(d_model, d_model * 2), nn.GELU(), nn.Dropout(dropout), nn.Linear(d_model * 2, d_model))
         self.out = nn.Linear(d_model, 1)
 
-    def forward(self, x, coords, input_chans, ds, fmri_coords):
+    def forward(self, x, coords, input_chans, ds, fmri_coords, return_aux: bool = False):
         tokens = self.labram.forward_features(x, input_chans=input_chans, return_all_tokens=True)
         patch_tokens = tokens[:, 1:, :]
         n_ch = x.shape[1]
@@ -236,10 +236,13 @@ class LaBraMSpatialDistiller(nn.Module):
         memory = self.eeg_encoder(memory)
         q = self.fmri_coord(fmri_coords).unsqueeze(0).expand(x.shape[0], -1, -1)
         q = q + self.dataset_embed(ds).unsqueeze(1)
-        attended, _ = self.cross(q, memory, memory, need_weights=False)
+        attended, attn = self.cross(q, memory, memory, need_weights=return_aux, average_attn_weights=True)
         h = self.norm(q + attended)
         h = self.norm(h + self.ffn(h))
-        return self.out(h).squeeze(-1)
+        pred = self.out(h).squeeze(-1)
+        if not return_aux:
+            return pred
+        return pred, {"roi_hidden": h, "attn": attn, "memory": memory}
 
 
 def configure_trainable_labram(
