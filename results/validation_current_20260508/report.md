@@ -69,3 +69,22 @@ NatView subject-heldout direct Schaefer-100 results improved:
 | NatView spatial distillation | 3 | 0.0215 | 0.0124 | -0.0070 | First multi-fold LaBraM direct run above null |
 
 This is a useful positive signal, but still not enough to declare success. The residual-target spatial-distillation split remained weaker than residual shifted-null, so the current model is learning some fMRI spatially structured signal, but not yet a clean residual EEG-to-fMRI mapping.
+
+## Addendum: NeuroSTORM Manifold Bridge
+
+The NeuroSTORM branch was upgraded from plain latent regression to a manifold bridge:
+
+- LaBraM EEG tokens predict compressed NeuroSTORM 2x2x2 spatial latent tokens.
+- A frozen ridge decoder is fit from NeuroSTORM latent to Schaefer-100 on training fMRI only; EEG-predicted latent is penalized through this frozen decoder.
+- Latent token Gram loss preserves NeuroSTORM token-token spatial topology.
+- Latent query attention gets the same electrode-to-query geometry regularization.
+- Contrastive queue is used for larger negative pools without increasing CUDA batch size.
+
+NatView one-fold results with PCA32 NeuroSTORM teacher:
+
+| Setting | latent r | shifted latent r | decoded ROI r | shifted decoded ROI r | Note |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Manifold bridge, moderate decoder weight | 0.0018 | 0.0024 | 0.0068 | -0.0232 | Decoder path beats null, latent alignment does not |
+| Manifold bridge, strong decoder weight | 0.0012 | 0.0005 | 0.0031 | -0.0190 | Slight latent-null gap, weaker decoded ROI |
+
+This means the bridge is now connected to a frozen fMRI latent-to-ROI manifold, but the current NeuroSTORM latent target is still too hard/noisy for robust EEG alignment. At this stage Schaefer spatial distillation gives the stronger measurable signal, while NeuroSTORM should remain a second-stage objective after improving the EEG-to-spatial-ROI anchor.

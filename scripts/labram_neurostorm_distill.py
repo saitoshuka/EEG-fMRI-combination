@@ -37,6 +37,7 @@ from labram_distill import (  # noqa: E402
 )
 from labram_frozen import load_labram_model  # noqa: E402
 from labram_schaefer_distill import (  # noqa: E402
+    attention_geometry_alignment_loss,
     geometry_smoothness_loss,
     prepare_run_metadata,
     schaefer100_coords,
@@ -125,6 +126,109 @@ def project_teacher_per_token(z_all: np.ndarray, train_idx: np.ndarray, pca_dim:
 def neurostorm_token_coords() -> np.ndarray:
     vals = [-0.5, 0.5]
     return np.asarray(list(product(vals, vals, vals)), dtype=np.float32)
+
+
+def fit_latent_roi_decoder(z: np.ndarray, y: np.ndarray, alpha: float) -> tuple[np.ndarray, np.ndarray]:
+    x = z.reshape(z.shape[0], -1).astype(np.float64)
+    y = y.astype(np.float64)
+    x_mean = x.mean(axis=0, keepdims=True)
+    x_std = np.maximum(x.std(axis=0, keepdims=True), 1e-6)
+    y_mean = y.mean(axis=0, keepdims=True)
+    xz = (x - x_mean) / x_std
+    xtx = xz.T @ xz
+    reg = float(alpha) * np.eye(xtx.shape[0], dtype=np.float64)
+    w = np.linalg.solve(xtx + reg, xz.T @ (y - y_mean))
+    bias = y_mean.reshape(-1) - (x_mean.reshape(-1) / x_std.reshape(-1)) @ w
+    weight = (w / x_std.reshape(-1, 1)).T.astype(np.float32)
+    return weight, bias.astype(np.float32)
+
+
+def decode_latent_roi(z: torch.Tensor, decoder: tuple[torch.Tensor, torch.Tensor] | None) -> torch.Tensor | None:
+    if decoder is None:
+        return None
+    weight, bias = decoder
+    return F.linear(z.flatten(1).float(), weight, bias)
+
+
+def latent_token_gram_loss(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    if pred.shape[1] < 2:
+        return pred.new_zeros(())
+    pred_z = F.normalize(pred.float(), dim=-1)
+    target_z = F.normalize(target.float(), dim=-1)
+    pred_gram = pred_z @ pred_z.transpose(1, 2)
+    target_gram = target_z @ target_z.transpose(1, 2)
+    pair = ~torch.eye(pred.shape[1], dtype=torch.bool, device=pred.device)
+    return (pred_gram[:, pair] - target_gram[:, pair]).square().mean()
+
+
+class TargetContrastiveQueue:
+    def __init__(self, dim: int, capacity: int, device: torch.device):
+        self.capacity = int(capacity)
+        self.target = torch.zeros((self.capacity, dim), dtype=torch.float32, device=device)
+        self.ds = torch.zeros((self.capacity,), dtype=torch.long, device=device)
+        self.ptr = 0
+        self.size = 0
+
+    def add(self, target: torch.Tensor, ds: torch.Tensor) -> None:
+        if self.capacity <= 0 or target.numel() == 0:
+            return
+        target = target.detach().float()
+        ds = ds.detach().long()
+        if target.shape[0] >= self.capacity:
+            self.target.copy_(target[-self.capacity :])
+            self.ds.copy_(ds[-self.capacity :])
+            self.ptr = 0
+            self.size = self.capacity
+            return
+        n = target.shape[0]
+        end = self.ptr + n
+        if end <= self.capacity:
+            self.target[self.ptr : end] = target
+            self.ds[self.ptr : end] = ds
+        else:
+            first = self.capacity - self.ptr
+            self.target[self.ptr :] = target[:first]
+            self.ds[self.ptr :] = ds[:first]
+            self.target[: end - self.capacity] = target[first:]
+            self.ds[: end - self.capacity] = ds[first:]
+        self.ptr = end % self.capacity
+        self.size = min(self.capacity, self.size + n)
+
+    def candidates(self, did: torch.Tensor) -> torch.Tensor:
+        if self.size <= 0:
+            return self.target[:0]
+        idx = torch.nonzero(self.ds[: self.size] == did, as_tuple=True)[0]
+        return self.target[: self.size][idx]
+
+
+def queued_contrastive_loss(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    ds: torch.Tensor,
+    temp: float,
+    min_items: int,
+    queue: TargetContrastiveQueue,
+) -> torch.Tensor:
+    pred_flat = pred.flatten(1).float()
+    target_flat = target.flatten(1).float()
+    losses = []
+    counts = []
+    for did in torch.unique(ds):
+        idx = torch.nonzero(ds == did, as_tuple=True)[0]
+        if idx.numel() < 2:
+            continue
+        candidates = torch.cat([target_flat[idx].detach(), queue.candidates(did)], dim=0)
+        if candidates.shape[0] < min_items:
+            continue
+        logits = (F.normalize(pred_flat[idx], dim=-1) @ F.normalize(candidates, dim=-1).T) / max(temp, 1e-4)
+        labels = torch.arange(idx.numel(), device=pred.device)
+        losses.append(F.cross_entropy(logits, labels))
+        counts.append(float(idx.numel()))
+    if not losses:
+        return pred.new_zeros(())
+    weights = pred.new_tensor(counts)
+    weights = weights / weights.sum()
+    return torch.stack(losses).mul(weights).sum()
 
 
 class NeuroSTORMDistillDataset(Dataset):
@@ -233,28 +337,46 @@ class LaBraMNeuroSTORMDistiller(nn.Module):
         memory = self.token_proj(ch_tokens) + self.eeg_coord(coords)
         return self.eeg_encoder(memory)
 
-    def query(self, memory, query_coords, ds, out):
+    def query(self, memory, query_coords, ds, out, return_attn: bool = False):
         q = self.query_coord(query_coords).unsqueeze(0).expand(memory.shape[0], -1, -1)
         q = q + self.dataset_embed(ds).unsqueeze(1)
-        attended, _ = self.cross(q, memory, memory, need_weights=False)
+        attended, attn = self.cross(q, memory, memory, need_weights=return_attn, average_attn_weights=True)
         h = self.norm(q + attended)
         h = self.norm(h + self.ffn(h))
-        return out(h)
+        result = out(h)
+        if return_attn:
+            return result, attn, h
+        return result
 
-    def forward(self, x, coords, input_chans, ds, latent_coords, roi_coords):
+    def forward(self, x, coords, input_chans, ds, latent_coords, roi_coords, return_aux: bool = False):
         memory = self.encode_memory(x, coords, input_chans)
+        if return_aux:
+            z, latent_attn, latent_hidden = self.query(memory, latent_coords, ds, self.latent_out, return_attn=True)
+            y, roi_attn, roi_hidden = self.query(memory, roi_coords, ds, self.roi_out, return_attn=True)
+            return z, y.squeeze(-1), {
+                "latent_attn": latent_attn,
+                "roi_attn": roi_attn,
+                "latent_hidden": latent_hidden,
+                "roi_hidden": roi_hidden,
+                "memory": memory,
+            }
         z = self.query(memory, latent_coords, ds, self.latent_out)
         y = self.query(memory, roi_coords, ds, self.roi_out).squeeze(-1)
         return z, y
 
 
-def train_model(model, train_loader, val_loader, latent_coords, roi_coords, args):
+def train_model(model, train_loader, val_loader, latent_coords, roi_coords, latent_roi_decoder, args):
     device = torch.device(args.device)
     model.to(device)
     latent_coords = latent_coords.to(device)
     roi_coords = roi_coords.to(device)
+    if latent_roi_decoder is not None:
+        latent_roi_decoder = tuple(t.to(device) for t in latent_roi_decoder)
     opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=args.lr, weight_decay=args.weight_decay)
     scaler = torch.amp.GradScaler("cuda", enabled=args.amp and device.type == "cuda")
+    queue = None
+    if args.contrastive_queue_size > 0:
+        queue = TargetContrastiveQueue(8 * args.effective_latent_dim, args.contrastive_queue_size, device)
     best_state = None
     best_loss = math.inf
     best_epoch = 0
@@ -270,7 +392,12 @@ def train_model(model, train_loader, val_loader, latent_coords, roi_coords, args
             y = y.to(device)
             opt.zero_grad(set_to_none=True)
             with torch.amp.autocast("cuda", enabled=args.amp and device.type == "cuda"):
-                pred_z, pred_y = model(x, coords, input_chans, ds, latent_coords, roi_coords)
+                need_aux = args.latent_attention_geometry_weight > 0 or args.roi_attention_geometry_weight > 0
+                out = model(x, coords, input_chans, ds, latent_coords, roi_coords, return_aux=need_aux)
+                if need_aux:
+                    pred_z, pred_y, aux = out
+                else:
+                    pred_z, pred_y, aux = out[0], out[1], {}
                 flat_pred = pred_z.flatten(1)
                 flat_true = z.flatten(1)
                 mse = F.mse_loss(pred_z, z)
@@ -278,11 +405,29 @@ def train_model(model, train_loader, val_loader, latent_coords, roi_coords, args
                 true_c = flat_true - flat_true.mean(0, keepdim=True)
                 corr = (pred_c * true_c).sum(0) / torch.sqrt((pred_c.square().sum(0) * true_c.square().sum(0)).clamp_min(1e-6))
                 loss = mse - args.corr_weight * corr.mean()
+                if args.latent_token_gram_weight > 0:
+                    loss = loss + args.latent_token_gram_weight * latent_token_gram_loss(pred_z, z)
+                decoded_y = decode_latent_roi(pred_z, latent_roi_decoder)
+                if decoded_y is not None and args.decoder_roi_weight > 0:
+                    loss = loss + args.decoder_roi_weight * F.mse_loss(decoded_y.to(dtype=pred_z.dtype), y)
                 if args.roi_weight > 0:
                     loss = loss + args.roi_weight * F.mse_loss(pred_y, y)
                 if args.contrastive_weight > 0:
-                    loss = loss + args.contrastive_weight * map_contrastive_loss(
-                        flat_pred, flat_true, ds, args.contrastive_temp, args.contrastive_min_items
+                    if queue is None:
+                        loss = loss + args.contrastive_weight * map_contrastive_loss(
+                            flat_pred, flat_true, ds, args.contrastive_temp, args.contrastive_min_items
+                        )
+                    else:
+                        loss = loss + args.contrastive_weight * queued_contrastive_loss(
+                            pred_z, z, ds, args.contrastive_temp, args.contrastive_min_items, queue
+                        )
+                if args.latent_attention_geometry_weight > 0:
+                    loss = loss + args.latent_attention_geometry_weight * attention_geometry_alignment_loss(
+                        aux.get("latent_attn"), coords, latent_coords, None, args.attention_geometry_sigma
+                    )
+                if args.roi_attention_geometry_weight > 0:
+                    loss = loss + args.roi_attention_geometry_weight * attention_geometry_alignment_loss(
+                        aux.get("roi_attn"), coords, roi_coords, None, args.attention_geometry_sigma
                     )
                 if args.geometry_weight > 0:
                     loss = loss + args.geometry_weight * geometry_smoothness_loss(
@@ -294,6 +439,8 @@ def train_model(model, train_loader, val_loader, latent_coords, roi_coords, args
                 nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad], args.grad_clip)
             scaler.step(opt)
             scaler.update()
+            if queue is not None:
+                queue.add(z.flatten(1), ds)
 
         model.eval()
         total = 0.0
@@ -309,6 +456,9 @@ def train_model(model, train_loader, val_loader, latent_coords, roi_coords, args
                     roi_coords,
                 )
                 val = F.mse_loss(pred_z, z.to(device))
+                decoded_y = decode_latent_roi(pred_z, latent_roi_decoder)
+                if decoded_y is not None and args.decoder_roi_weight > 0:
+                    val = val + args.decoder_roi_weight * F.mse_loss(decoded_y, y.to(device))
                 if args.roi_weight > 0:
                     val = val + args.roi_weight * F.mse_loss(pred_y, y.to(device))
                 total += float(val.detach().cpu()) * x.shape[0]
@@ -330,12 +480,14 @@ def train_model(model, train_loader, val_loader, latent_coords, roi_coords, args
     return model, {"best_epoch": float(best_epoch), "best_val_loss": float(best_loss), "epochs_ran": float(epoch)}
 
 
-def predict_model(model, loader, latent_coords, roi_coords, args) -> tuple[np.ndarray, np.ndarray]:
+def predict_model(model, loader, latent_coords, roi_coords, latent_roi_decoder, args) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
     device = torch.device(args.device)
     model.eval().to(device)
     latent_coords = latent_coords.to(device)
     roi_coords = roi_coords.to(device)
-    zs, ys = [], []
+    if latent_roi_decoder is not None:
+        latent_roi_decoder = tuple(t.to(device) for t in latent_roi_decoder)
+    zs, ys, yd = [], [], []
     with torch.no_grad():
         for x, coords, input_chans, ds, _, _ in loader:
             pred_z, pred_y = model(
@@ -348,7 +500,11 @@ def predict_model(model, loader, latent_coords, roi_coords, args) -> tuple[np.nd
             )
             zs.append(pred_z.float().cpu().numpy())
             ys.append(pred_y.float().cpu().numpy())
-    return np.concatenate(zs, axis=0), np.concatenate(ys, axis=0)
+            decoded_y = decode_latent_roi(pred_z, latent_roi_decoder)
+            if decoded_y is not None:
+                yd.append(decoded_y.float().cpu().numpy())
+    decoded = np.concatenate(yd, axis=0) if yd else None
+    return np.concatenate(zs, axis=0), np.concatenate(ys, axis=0), decoded
 
 
 def nanmean(values) -> float:
@@ -398,7 +554,15 @@ def write_outputs(rows: list[dict[str, object]], args: argparse.Namespace) -> No
         selected = [r for r in rows if (str(r["eval_dataset"]), str(r["model"])) == key]
         summary["models"]["/".join(key)] = {
             m: nanmean([float(r.get(m, math.nan)) for r in selected])
-            for m in ["latent_corr_mean", "latent_row_corr_mean", "roi_corr_mean", "r2_variance_weighted", "best_val_loss"]
+            for m in [
+                "latent_corr_mean",
+                "latent_row_corr_mean",
+                "roi_corr_mean",
+                "decoder_roi_corr_mean",
+                "r2_variance_weighted",
+                "decoder_r2_variance_weighted",
+                "best_val_loss",
+            ]
         }
     (args.out_dir / "summary.json").write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
     lines = [
@@ -408,13 +572,14 @@ def write_outputs(rows: list[dict[str, object]], args: argparse.Namespace) -> No
         "",
         f"- Metrics: `{metrics_path}`",
         "",
-        "| dataset/model | latent r | row r | ROI r | R2 |",
-        "| --- | ---: | ---: | ---: | ---: |",
+        "| dataset/model | latent r | row r | direct ROI r | decoded ROI r | decoded R2 |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
     ]
     for name, metrics in summary["models"].items():
         lines.append(
             f"| {name} | {metrics['latent_corr_mean']:.4f} | {metrics['latent_row_corr_mean']:.4f} | "
-            f"{metrics['roi_corr_mean']:.4f} | {metrics['r2_variance_weighted']:.4f} |"
+            f"{metrics['roi_corr_mean']:.4f} | {metrics['decoder_roi_corr_mean']:.4f} | "
+            f"{metrics['decoder_r2_variance_weighted']:.4f} |"
         )
     (args.out_dir / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     fig, ax = plt.subplots(figsize=(max(9, len(rows) * 0.5), 4))
@@ -478,12 +643,22 @@ def eval_cmd(args: argparse.Namespace) -> None:
                 train_idx = np.sort(rng.choice(train_idx, size=args.max_train_windows, replace=False))
             z_all = project_teacher_per_token(z_raw_all, train_idx, args.teacher_pca_dim, args.seed + fold_id)
             latent_dim = int(z_all.shape[-1])
+            args.effective_latent_dim = latent_dim
+            dec_w, dec_b = fit_latent_roi_decoder(
+                z_all[train_idx], y_all[train_idx], args.decoder_ridge_alpha
+            )
+            latent_roi_decoder = (
+                torch.from_numpy(dec_w),
+                torch.from_numpy(dec_b),
+            )
 
             if args.time_baseline:
                 z_flat = z_all.reshape(z_all.shape[0], -1)
                 time_model = fit_time_ridge(runs, table, single_train_idx, z_flat[single_train_idx], args.time_harmonics)
                 z_pred_flat = predict_time_ridge(time_model, runs, table, test_idx, args.time_harmonics)
                 z_pred = z_pred_flat.reshape(-1, 8, latent_dim)
+                y_decoded = z_pred.reshape(z_pred.shape[0], -1) @ dec_w.T + dec_b
+                decoded_eval = evaluate_prediction(y_all[test_idx], y_decoded)
                 rows.append(
                     {
                         "eval_dataset": eval_dataset,
@@ -495,6 +670,11 @@ def eval_cmd(args: argparse.Namespace) -> None:
                         **latent_metrics(z_all[test_idx], z_pred),
                         "roi_corr_mean": math.nan,
                         "r2_variance_weighted": math.nan,
+                        "decoder_roi_corr_mean": decoded_eval["roi_corr_mean"],
+                        "decoder_roi_corr_median": decoded_eval["roi_corr_median"],
+                        "decoder_roi_corr_positive_frac": decoded_eval["roi_corr_positive_frac"],
+                        "decoder_spatial_corr_mean": decoded_eval["spatial_corr_mean"],
+                        "decoder_r2_variance_weighted": decoded_eval["r2_variance_weighted"],
                         "best_val_loss": math.nan,
                         "epochs_ran": 0.0,
                     }
@@ -575,8 +755,26 @@ def eval_cmd(args: argparse.Namespace) -> None:
                     f"n_train={train_idx.size} n_test={test_idx.size} trainable={trainable}",
                     flush=True,
                 )
-                model, info = train_model(model, train_loader, val_loader, latent_coords, roi_coords, args)
-                z_pred, y_pred = predict_model(model, test_loader, latent_coords, roi_coords, args)
+                model, info = train_model(model, train_loader, val_loader, latent_coords, roi_coords, latent_roi_decoder, args)
+                z_pred, y_pred, y_decoded = predict_model(model, test_loader, latent_coords, roi_coords, latent_roi_decoder, args)
+                decoded_metrics = {}
+                if y_decoded is not None:
+                    decoded_eval = evaluate_prediction(y_all[test_idx], y_decoded)
+                    decoded_metrics = {
+                        "decoder_roi_corr_mean": decoded_eval["roi_corr_mean"],
+                        "decoder_roi_corr_median": decoded_eval["roi_corr_median"],
+                        "decoder_roi_corr_positive_frac": decoded_eval["roi_corr_positive_frac"],
+                        "decoder_spatial_corr_mean": decoded_eval["spatial_corr_mean"],
+                        "decoder_r2_variance_weighted": decoded_eval["r2_variance_weighted"],
+                    }
+                else:
+                    decoded_metrics = {
+                        "decoder_roi_corr_mean": math.nan,
+                        "decoder_roi_corr_median": math.nan,
+                        "decoder_roi_corr_positive_frac": math.nan,
+                        "decoder_spatial_corr_mean": math.nan,
+                        "decoder_r2_variance_weighted": math.nan,
+                    }
                 rows.append(
                     {
                         "eval_dataset": eval_dataset,
@@ -587,6 +785,7 @@ def eval_cmd(args: argparse.Namespace) -> None:
                         "test_subjects": " ".join(sorted(test_subjects.astype(str))),
                         **latent_metrics(z_all[test_idx], z_pred),
                         **evaluate_prediction(y_all[test_idx], y_pred),
+                        **decoded_metrics,
                         **info,
                         "trainable_params": int(trainable),
                     }
@@ -620,10 +819,17 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--dropout", type=float, default=0.1)
     p.add_argument("--corr-weight", type=float, default=0.05)
     p.add_argument("--roi-weight", type=float, default=0.2)
+    p.add_argument("--decoder-roi-weight", type=float, default=0.0)
+    p.add_argument("--decoder-ridge-alpha", type=float, default=10.0)
     p.add_argument("--teacher-pca-dim", type=int, default=0)
     p.add_argument("--contrastive-weight", type=float, default=0.02)
     p.add_argument("--contrastive-temp", type=float, default=0.07)
     p.add_argument("--contrastive-min-items", type=int, default=4)
+    p.add_argument("--contrastive-queue-size", type=int, default=0)
+    p.add_argument("--latent-token-gram-weight", type=float, default=0.0)
+    p.add_argument("--latent-attention-geometry-weight", type=float, default=0.0)
+    p.add_argument("--roi-attention-geometry-weight", type=float, default=0.0)
+    p.add_argument("--attention-geometry-sigma", type=float, default=0.8)
     p.add_argument("--geometry-weight", type=float, default=0.01)
     p.add_argument("--geometry-sigma", type=float, default=0.45)
     p.add_argument("--grad-clip", type=float, default=1.0)

@@ -758,7 +758,7 @@ def parse_args() -> argparse.Namespace:
     p_eval.add_argument("--raw-cache-dir", type=Path, default=DEFAULT_RAW_CACHE)
     p_eval.add_argument("--out-dir", type=Path, default=DEFAULT_RESULTS)
     p_eval.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT)
-    p_eval.add_argument("--include-dataset", action="append", default=["natview"])
+    p_eval.add_argument("--include-dataset", action="append", default=[])
     p_eval.add_argument("--eval-dataset", action="append", default=[])
     p_eval.add_argument("--device", default="auto")
     p_eval.add_argument("--amp", action="store_true")
