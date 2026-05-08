@@ -6,6 +6,12 @@ The Schaefer100 cache remains the ROI reconstruction target.  This script adds
 are the final NeuroSTORM 2x2x2 spatial tokens; keeping them separate gives the
 EEG model a teacher target with explicit fMRI spatial structure instead of a
 single pooled vector.
+
+The volume preprocessing mirrors NeuroSTORM's released pipeline as closely as
+possible for paired EEG/fMRI use: primary MNI152 alignment is assumed or applied
+first, then volumes are spatially resampled to 2 mm, temporally resampled to the
+0.8 s frame grid used by NeuroSTORM, cropped/padded to 96^3, background-filled,
+z-normalized, and passed through the frozen MAE encoder.
 """
 
 from __future__ import annotations
@@ -43,6 +49,7 @@ DEFAULT_OUT = REPO_ROOT / "data/pooled_raw_schaefer100_neurostorm_full/run_cache
 DEFAULT_LATENTS = REPO_ROOT / "data/neurostorm_latents_full"
 DEFAULT_CKPT = REPO_ROOT / "external/NeuroSTORM/checkpoints/neurostorm/pt_neurostorm_mae_ratio0.5.ckpt"
 NATVIEW_ROOT = REPO_ROOT / "downloads/paired_datasets/NatView_NKI_EEG_fMRI_Naturalistic_Viewing"
+NEUROSTORM_PREPROCESS_KIND = "mni152_2mm_tr0p8_crop96_bgmin_runznorm_v2"
 
 
 @dataclass
@@ -54,8 +61,11 @@ class LatentRow:
     latent_path: str
     n_windows: int
     n_time: int
+    source_tr_sec: float
+    latent_tr_sec: float
     latent_shape: str
     volume_source: str
+    preprocess_kind: str
     status: str
     error: str = ""
 
@@ -132,10 +142,51 @@ def spatial_resample_to_2mm(data: np.ndarray, zooms: tuple[float, float, float],
     return np.concatenate(chunks, axis=3).astype(np.float32)
 
 
-def neurostorm_preprocess(data: np.ndarray, zooms: tuple[float, float, float]) -> np.ndarray:
+def temporal_resample_to_resolution(
+    data: np.ndarray,
+    source_tr: float,
+    target_tr: float,
+    voxel_batch: int = 40000,
+) -> np.ndarray:
+    if target_tr <= 0:
+        raise ValueError("target_tr must be positive")
+    source_tr = float(source_tr)
+    if source_tr <= 0:
+        raise ValueError("source_tr must be positive")
+    n_time = int(data.shape[3])
+    new_t = max(int(round(n_time * source_tr / target_tr)), 1)
+    if new_t == n_time:
+        return data.astype(np.float32, copy=False)
+
+    flat = np.ascontiguousarray(data.reshape(-1, n_time).astype(np.float32, copy=False))
+    out = np.empty((flat.shape[0], new_t), dtype=np.float32)
+    for start in range(0, flat.shape[0], voxel_batch):
+        block = torch.from_numpy(flat[start : start + voxel_batch]).unsqueeze(0)
+        y = F.interpolate(block, size=new_t, mode="linear", align_corners=False)
+        out[start : start + voxel_batch] = y.squeeze(0).numpy()
+    return out.reshape(*data.shape[:3], new_t).astype(np.float32)
+
+
+def neurostorm_preprocess(
+    data: np.ndarray,
+    zooms: tuple[float, float, float],
+    source_tr: float,
+    target_tr: float,
+    temporal_resample: bool,
+    spatial_frame_batch: int,
+    temporal_voxel_batch: int,
+) -> tuple[np.ndarray, float]:
     data = np.asarray(data, dtype=np.float32)
-    data = spatial_resample_to_2mm(data, zooms)
+    data = spatial_resample_to_2mm(data, zooms, frame_batch=spatial_frame_batch)
     data = center_crop_pad_4d(data, 96)
+    latent_tr = float(target_tr) if temporal_resample else float(source_tr)
+    if temporal_resample:
+        data = temporal_resample_to_resolution(
+            data,
+            source_tr=source_tr,
+            target_tr=target_tr,
+            voxel_batch=temporal_voxel_batch,
+        )
     data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
     background = (np.abs(data).sum(axis=3) == 0) | (~np.isfinite(data).all(axis=3))
     data[background[..., None].repeat(data.shape[3], axis=3)] = 0.0
@@ -149,7 +200,7 @@ def neurostorm_preprocess(data: np.ndarray, zooms: tuple[float, float, float]) -
     normed = (data - mean) / std
     fill = float(normed[mask, :].min())
     normed[~mask, :] = fill
-    return normed.astype(np.float32)
+    return normed.astype(np.float32), latent_tr
 
 
 def infer_latent_timeseries(
@@ -243,7 +294,29 @@ def latent_path_for(src: Path, out_latent_dir: Path, dataset: str) -> Path:
     return out_latent_dir / slug(dataset) / f"{src.stem}_neurostorm.npz"
 
 
-def copy_with_latents(src: Path, dst: Path, z_aligned: np.ndarray, latent_path: Path, good: np.ndarray) -> None:
+def latent_cache_is_compatible(latent: np.lib.npyio.NpzFile, args: argparse.Namespace) -> bool:
+    if "preprocess_kind" not in latent.files:
+        return False
+    if scalar_str(latent["preprocess_kind"]) != args.preprocess_kind:
+        return False
+    if "latent_tr_sec" not in latent.files:
+        return False
+    if args.temporal_resample:
+        return abs(float(latent["latent_tr_sec"]) - float(args.target_tr)) < 1e-4
+    return True
+
+
+def copy_with_latents(
+    src: Path,
+    dst: Path,
+    z_aligned: np.ndarray,
+    latent_path: Path,
+    good: np.ndarray,
+    source_tr: float,
+    latent_tr: float,
+    volume_source: str,
+    preprocess_kind: str,
+) -> None:
     z = np.load(src, allow_pickle=True)
     item = {k: z[k] for k in z.files}
     if not good.all():
@@ -253,6 +326,10 @@ def copy_with_latents(src: Path, dst: Path, z_aligned: np.ndarray, latent_path: 
     item["Z_neurostorm"] = z_aligned.astype(np.float16)
     item["neurostorm_latent_path"] = np.asarray(str(latent_path), dtype="U512")
     item["neurostorm_latent_kind"] = np.asarray("neurostorm_mae_encoder_2x2x2x288", dtype="U96")
+    item["neurostorm_preprocess_kind"] = np.asarray(preprocess_kind, dtype="U128")
+    item["neurostorm_source_tr_sec"] = np.asarray(source_tr, dtype=np.float32)
+    item["neurostorm_latent_tr_sec"] = np.asarray(latent_tr, dtype=np.float32)
+    item["neurostorm_volume_source"] = np.asarray(volume_source, dtype="U512")
     dst.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(dst, **item)
 
@@ -266,20 +343,33 @@ def process_one(src: Path, args: argparse.Namespace, encoder: NeuroSTORM, tmp_ro
     lat_path = latent_path_for(src, args.latent_dir, dataset)
     lat_path.parent.mkdir(parents=True, exist_ok=True)
 
+    reuse_existing = False
     if lat_path.exists() and not args.rebuild_latent:
         latent = np.load(lat_path, allow_pickle=True)
+        reuse_existing = latent_cache_is_compatible(latent, args)
+    if reuse_existing:
         z_time = np.asarray(latent["Z_time"], dtype=np.float32)
-        tr = float(latent["tr_sec"])
+        source_tr = float(latent["source_tr_sec"]) if "source_tr_sec" in latent.files else float(latent["tr_sec"])
+        latent_tr = float(latent["latent_tr_sec"])
         volume_source = scalar_str(latent["volume_source"])
+        preprocess_kind = scalar_str(latent["preprocess_kind"])
     else:
         if dataset == "natview":
-            data, zooms, tr, volume_source = load_natview_volume(z)
+            data, zooms, source_tr, volume_source = load_natview_volume(z)
         else:
             target_path = Path(scalar_str(z["target_path"]))
             if not target_path.is_absolute():
                 target_path = REPO_ROOT / target_path
-            data, zooms, tr, volume_source = load_external_mni_volume(target_path, tmp_root, args.motion_transform)
-        prepped = neurostorm_preprocess(data, zooms)
+            data, zooms, source_tr, volume_source = load_external_mni_volume(target_path, tmp_root, args.motion_transform)
+        prepped, latent_tr = neurostorm_preprocess(
+            data,
+            zooms,
+            source_tr=source_tr,
+            target_tr=args.target_tr,
+            temporal_resample=args.temporal_resample,
+            spatial_frame_batch=args.spatial_frame_batch,
+            temporal_voxel_batch=args.temporal_voxel_batch,
+        )
         del data
         z_time = infer_latent_timeseries(
             encoder,
@@ -292,19 +382,33 @@ def process_one(src: Path, args: argparse.Namespace, encoder: NeuroSTORM, tmp_ro
         np.savez_compressed(
             lat_path,
             Z_time=z_time.astype(np.float16),
-            tr_sec=np.asarray(tr, dtype=np.float32),
+            tr_sec=np.asarray(latent_tr, dtype=np.float32),
+            source_tr_sec=np.asarray(source_tr, dtype=np.float32),
+            latent_tr_sec=np.asarray(latent_tr, dtype=np.float32),
             volume_source=np.asarray(volume_source, dtype="U512"),
             latent_kind=np.asarray("neurostorm_mae_encoder_2x2x2x288_run_zscore", dtype="U96"),
+            preprocess_kind=np.asarray(args.preprocess_kind, dtype="U128"),
         )
+        preprocess_kind = args.preprocess_kind
         del prepped
 
     sample_time = np.asarray(z["sample_time"], dtype=np.float32)
-    idx = np.rint(sample_time / tr - 0.5).astype(np.int64)
+    idx = np.rint(sample_time / latent_tr - 0.5).astype(np.int64)
     good = (idx >= 0) & (idx < z_time.shape[0])
     if good.sum() < args.min_windows:
         raise ValueError(f"too few NeuroSTORM-aligned windows: {good.sum()}")
     z_aligned = z_time[idx[good]]
-    copy_with_latents(src, dst, z_aligned, lat_path, good)
+    copy_with_latents(
+        src,
+        dst,
+        z_aligned,
+        lat_path,
+        good,
+        source_tr=source_tr,
+        latent_tr=latent_tr,
+        volume_source=volume_source,
+        preprocess_kind=preprocess_kind,
+    )
     return LatentRow(
         dataset=dataset,
         subject=subject,
@@ -313,8 +417,11 @@ def process_one(src: Path, args: argparse.Namespace, encoder: NeuroSTORM, tmp_ro
         latent_path=str(lat_path),
         n_windows=int(z_aligned.shape[0]),
         n_time=int(z_time.shape[0]),
+        source_tr_sec=float(source_tr),
+        latent_tr_sec=float(latent_tr),
         latent_shape=str(tuple(z_aligned.shape)),
         volume_source=volume_source,
+        preprocess_kind=preprocess_kind,
         status="ok",
     )
 
@@ -331,6 +438,16 @@ def run(args: argparse.Namespace) -> None:
     files = sorted(args.raw_cache_dir.glob("*/*.npz"))
     if include is not None:
         files = [p for p in files if p.parent.name in include]
+    if args.max_runs_per_dataset > 0:
+        seen: dict[str, int] = {}
+        selected = []
+        for path in files:
+            dataset_key = path.parent.name
+            if seen.get(dataset_key, 0) >= args.max_runs_per_dataset:
+                continue
+            selected.append(path)
+            seen[dataset_key] = seen.get(dataset_key, 0) + 1
+        files = selected
     if args.max_runs > 0:
         files = files[: args.max_runs]
     rows: list[LatentRow] = []
@@ -350,8 +467,11 @@ def run(args: argparse.Namespace) -> None:
                 latent_path="",
                 n_windows=0,
                 n_time=0,
+                source_tr_sec=0.0,
+                latent_tr_sec=0.0,
                 latent_shape="",
                 volume_source="",
+                preprocess_kind=args.preprocess_kind,
                 status="error",
                 error=str(exc),
             )
@@ -373,6 +493,9 @@ def run(args: argparse.Namespace) -> None:
         "errors": len(errors),
         "out_cache_dir": str(args.out_cache_dir),
         "latent_dir": str(args.latent_dir),
+        "preprocess_kind": args.preprocess_kind,
+        "target_tr_sec": args.target_tr,
+        "temporal_resample": args.temporal_resample,
     }
     (args.out_cache_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     shutil.rmtree(tmp_root, ignore_errors=True)
@@ -387,14 +510,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CKPT)
     parser.add_argument("--include-dataset", action="append", default=[])
     parser.add_argument("--max-runs", type=int, default=0)
+    parser.add_argument("--max-runs-per-dataset", type=int, default=0)
     parser.add_argument("--min-windows", type=int, default=20)
     parser.add_argument("--sequence-length", type=int, default=20)
     parser.add_argument("--infer-batch-size", type=int, default=1)
+    parser.add_argument("--target-tr", type=float, default=0.8, help="NeuroSTORM-style temporal grid in seconds.")
+    parser.add_argument("--no-temporal-resample", action="store_true", help="Keep source TR instead of NeuroSTORM's 0.8 s grid.")
+    parser.add_argument("--spatial-frame-batch", type=int, default=24)
+    parser.add_argument("--temporal-voxel-batch", type=int, default=40000)
     parser.add_argument("--motion-transform", default="QuickRigid")
     parser.add_argument("--device", default="auto")
     parser.add_argument("--amp", action="store_true")
     parser.add_argument("--rebuild-latent", action="store_true")
-    return parser.parse_args()
+    args = parser.parse_args()
+    args.temporal_resample = not args.no_temporal_resample
+    args.preprocess_kind = (
+        NEUROSTORM_PREPROCESS_KIND
+        if args.temporal_resample
+        else "mni152_2mm_native_tr_crop96_bgmin_runznorm_v2"
+    )
+    return args
 
 
 if __name__ == "__main__":
