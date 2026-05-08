@@ -22,6 +22,9 @@ downloads/.non_openneuro_download.lock
 .DS_Store
 Thumbs.db
 
+# Local notification metadata.
+logs/slack_notifications.jsonl
+
 # Derived feature caches can be regenerated from scripts.
 data/derived/
 data/pooled_v1/
