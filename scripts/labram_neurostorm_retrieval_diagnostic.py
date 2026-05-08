@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""CCA/PLS retrieval diagnostic for LaBraM EEG features vs NeuroSTORM latents.
+"""CCA/PLS retrieval diagnostic for LaBraM EEG features vs fMRI targets.
 
 This is deliberately not a deep supervised model.  It asks a simpler question:
 do frozen LaBraM EEG representations identify the corresponding fMRI teacher
-latent timepoint better than shifted or mean controls?
+latent/ROI timepoint better than shifted or mean controls?
 """
 
 from __future__ import annotations
@@ -43,6 +43,31 @@ DEFAULT_CACHE = REPO_ROOT / "data/pooled_raw_schaefer100_neurostorm_official_nat
 DEFAULT_FEATURES = REPO_ROOT / "data/labram_neurostorm_retrieval_natview/features.npz"
 DEFAULT_RESULTS = REPO_ROOT / "results/labram_neurostorm_retrieval_natview"
 DEFAULT_CHECKPOINT = REPO_ROOT / "external/LaBraM/checkpoints/labram-base.pth"
+
+
+def target_from_cache(z: np.lib.npyio.NpzFile, target_kind: str) -> tuple[np.ndarray, str]:
+    if target_kind == "auto":
+        if "Z_neurostorm" in z.files:
+            target_kind = "neurostorm"
+        elif "Y" in z.files:
+            target_kind = "schaefer100"
+        else:
+            raise KeyError("No supported target key found; expected Z_neurostorm or Y")
+    if target_kind == "neurostorm":
+        teacher = z["Z_neurostorm"].astype(np.float32)
+        return teacher.reshape(teacher.shape[0], -1), "neurostorm"
+    if target_kind == "schaefer100":
+        teacher = z["Y"].astype(np.float32)
+        if "Y_mask" in z.files:
+            mask = z["Y_mask"].astype(np.float32)
+            if mask.shape == teacher.shape:
+                teacher = teacher * mask
+            elif mask.ndim == 1 and mask.size == teacher.shape[1]:
+                teacher = teacher * mask.reshape(1, -1)
+            else:
+                raise ValueError(f"Unsupported Y_mask shape {mask.shape} for target shape {teacher.shape}")
+        return teacher.reshape(teacher.shape[0], -1), "schaefer100"
+    raise ValueError(f"Unknown target kind: {target_kind}")
 
 
 @dataclass
@@ -90,6 +115,9 @@ def extract_features(args: argparse.Namespace) -> None:
     args.feature_path.parent.mkdir(parents=True, exist_ok=True)
     model = load_labram_model(args.checkpoint, args.device)
     files = sorted(args.raw_cache_dir.glob("*/*.npz"))
+    if args.include_dataset:
+        include = set(args.include_dataset)
+        files = [path for path in files if path.parent.name in include]
     if args.max_runs > 0:
         files = files[: args.max_runs]
 
@@ -114,7 +142,7 @@ def extract_features(args: argparse.Namespace) -> None:
             indices, chosen = choose_labram_channels(channels, args.min_channels, args.max_channels)
             starts = z["sample_start"].astype(np.int64)
             raw = z["raw"].astype(np.float32)[indices]
-            teacher = z["Z_neurostorm"].astype(np.float32).reshape(z["Z_neurostorm"].shape[0], -1)
+            teacher, resolved_target_kind = target_from_cache(z, args.target_kind)
             n = min(starts.size, teacher.shape[0])
             starts = starts[:n]
             teacher = teacher[:n]
@@ -155,11 +183,14 @@ def extract_features(args: argparse.Namespace) -> None:
             manifest.append(
                 {
                     "path": str(path),
+                    "dataset": scalar(z["dataset"]) if "dataset" in z.files else path.parent.name,
                     "subject": subject,
                     "run": run,
                     "windows": int(starts.size),
                     "channels": int(len(chosen)),
                     "feature_dim": int(feat_all.shape[1]),
+                    "target_kind": resolved_target_kind,
+                    "target_dim": int(teacher.shape[1]),
                 }
             )
             print(f"[{i:03d}/{len(files):03d}] features {subject} windows={starts.size} channels={len(chosen)}", flush=True)
@@ -178,6 +209,7 @@ def extract_features(args: argparse.Namespace) -> None:
         sample_id=np.asarray(sample_ids, dtype=np.int32),
         time_frac=np.asarray(time_frac, dtype=np.float32),
         feature_mode=np.asarray(args.feature_mode, dtype="U32"),
+        target_kind=np.asarray(args.target_kind, dtype="U32"),
         source_cache=np.asarray(str(args.raw_cache_dir), dtype="U512"),
     )
     args.results_dir.mkdir(parents=True, exist_ok=True)
@@ -560,11 +592,12 @@ def write_outputs(args: argparse.Namespace, rows: list[MetricRow]) -> None:
     (args.results_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
     lines = [
-        "# LaBraM NeuroSTORM Retrieval Diagnostic",
+        "# LaBraM fMRI Retrieval Diagnostic",
         "",
-        "Frozen LaBraM features are aligned to official-style NeuroSTORM latent PCs using linear Ridge, PLS, and CCA. Retrieval is computed within each held-out run: the correct EEG/fMRI timepoint should rank above other timepoints from the same run.",
+        "Frozen LaBraM features are aligned to fMRI target PCs using linear Ridge, PLS, and CCA. Retrieval is computed within each held-out run: the correct EEG/fMRI timepoint should rank above other timepoints from the same run.",
         "",
         f"- Feature cache: `{args.feature_path}`",
+        f"- Target kind: `{args.target_kind}`",
         f"- Target PCA dim: {args.target_pca_dim}",
         f"- X PCA dim: {args.x_pca_dim}",
         "",
@@ -608,6 +641,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--amp", action="store_true")
     p.add_argument("--extract", action="store_true")
     p.add_argument("--force-extract", action="store_true")
+    p.add_argument("--include-dataset", action="append", default=[])
+    p.add_argument("--target-kind", choices=["auto", "neurostorm", "schaefer100"], default="neurostorm")
     p.add_argument("--max-runs", type=int, default=0)
     p.add_argument("--batch-size", type=int, default=64)
     p.add_argument("--feature-mode", default="cls_mean_std", choices=["mean", "cls_mean", "mean_std", "cls_mean_std"])
