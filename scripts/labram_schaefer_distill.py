@@ -248,6 +248,11 @@ def attention_geometry_alignment_loss(
     dist = torch.cdist(roi_xyz, electrode_xyz).square()
     prior = F.softmax(-dist / max(2.0 * sigma * sigma, 1e-6), dim=-1)
     attn_prob = attn.float().clamp_min(1e-6)
+    if attn_prob.shape[-1] != electrode_xyz.shape[0]:
+        n_ch = electrode_xyz.shape[0]
+        if attn_prob.shape[-1] % n_ch != 0:
+            return coords.new_zeros(())
+        attn_prob = attn_prob.reshape(attn_prob.shape[0], attn_prob.shape[1], -1, n_ch).sum(dim=2)
     attn_prob = attn_prob / attn_prob.sum(-1, keepdim=True).clamp_min(1e-6)
     ce = -(prior.unsqueeze(0) * attn_prob.log()).sum(-1)
     if roi_mask is not None:
@@ -467,6 +472,28 @@ def cap_by_dataset(train_idx: np.ndarray, table: dict[str, np.ndarray], cap: int
     return np.sort(np.concatenate(kept)) if kept else train_idx
 
 
+def valid_lag_window_mask(
+    runs,
+    table: dict[str, np.ndarray],
+    window_samples: int,
+    lag_offsets_samples: list[int],
+) -> np.ndarray:
+    valid = np.zeros(table["run_id"].shape[0], dtype=bool)
+    for global_idx in range(valid.size):
+        rid = int(table["run_id"][global_idx])
+        sample = int(table["sample_id"][global_idx])
+        base_start = int(runs[rid].starts[sample])
+        n_times = int(runs[rid].data.shape[1])
+        ok = True
+        for offset in lag_offsets_samples:
+            start = base_start + int(offset)
+            if start < 0 or start + window_samples > n_times:
+                ok = False
+                break
+        valid[global_idx] = ok
+    return valid
+
+
 def write_outputs(rows: list[dict[str, object]], args: argparse.Namespace) -> None:
     metrics_path = args.out_dir / "metrics.csv"
     fieldnames: list[str] = []
@@ -541,6 +568,16 @@ def eval_cmd(args: argparse.Namespace) -> None:
     roi_coords = torch.from_numpy(schaefer100_coords(args.schaefer_resolution_mm))
     window_samples = int(round(args.window_sec * args.resample_hz))
     patch_samples = int(round(args.patch_sec * args.resample_hz))
+    lag_offsets_sec = args.lag_offset_sec if args.lag_offset_sec else [0.0]
+    args.lag_offsets_samples = [int(round(float(v) * args.resample_hz)) for v in lag_offsets_sec]
+    valid_lag_mask = valid_lag_window_mask(runs, table, window_samples, args.lag_offsets_samples)
+    if args.verbose:
+        dropped = int((~valid_lag_mask).sum())
+        print(
+            f"lag_offsets_sec={lag_offsets_sec} valid_windows={int(valid_lag_mask.sum())}/"
+            f"{valid_lag_mask.size} dropped={dropped}",
+            flush=True,
+        )
     args.out_dir.mkdir(parents=True, exist_ok=True)
     rows: list[dict[str, object]] = []
 
@@ -555,9 +592,10 @@ def eval_cmd(args: argparse.Namespace) -> None:
         if args.max_folds:
             folds = folds[: args.max_folds]
         for fold_id, test_subjects in enumerate(folds, start=1):
-            test_mask = (table["dataset"] == eval_dataset) & np.isin(table["subject"], test_subjects)
-            single_train_mask = (table["dataset"] == eval_dataset) & (~test_mask)
-            pooled_train_mask = ~test_mask
+            base_test_mask = (table["dataset"] == eval_dataset) & np.isin(table["subject"], test_subjects)
+            test_mask = base_test_mask & valid_lag_mask
+            single_train_mask = (table["dataset"] == eval_dataset) & (~base_test_mask) & valid_lag_mask
+            pooled_train_mask = (~base_test_mask) & valid_lag_mask
             single_train_idx = np.flatnonzero(single_train_mask)
             test_idx = np.flatnonzero(test_mask)
             if single_train_idx.size < 50 or test_idx.size < 20:
@@ -633,6 +671,7 @@ def eval_cmd(args: argparse.Namespace) -> None:
                     window_samples,
                     patch_samples,
                     args.window_zscore,
+                    args.lag_offsets_samples,
                 )
                 train_loader = DataLoader(
                     ds_obj,
@@ -669,6 +708,7 @@ def eval_cmd(args: argparse.Namespace) -> None:
                     heads=args.heads,
                     layers=args.layers,
                     dropout=args.dropout,
+                    max_lags=max(16, len(args.lag_offsets_samples)),
                 )
                 model_name = (
                     "schaefer_residual_shifted_null"
@@ -789,6 +829,7 @@ def parse_args() -> argparse.Namespace:
     p_eval.add_argument("--window-sec", type=float, default=8.0)
     p_eval.add_argument("--patch-sec", type=float, default=1.0)
     p_eval.add_argument("--resample-hz", type=float, default=200.0)
+    p_eval.add_argument("--lag-offset-sec", action="append", type=float, default=[])
     p_eval.add_argument("--n-rois", type=int, default=100)
     p_eval.add_argument("--schaefer-resolution-mm", type=int, default=2)
     p_eval.add_argument("--min-channels", type=int, default=16)

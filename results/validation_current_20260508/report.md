@@ -88,3 +88,16 @@ NatView one-fold results with PCA32 NeuroSTORM teacher:
 | Manifold bridge, strong decoder weight | 0.0012 | 0.0005 | 0.0031 | -0.0190 | Slight latent-null gap, weaker decoded ROI |
 
 This means the bridge is now connected to a frozen fMRI latent-to-ROI manifold, but the current NeuroSTORM latent target is still too hard/noisy for robust EEG alignment. At this stage Schaefer spatial distillation gives the stronger measurable signal, while NeuroSTORM should remain a second-stage objective after improving the EEG-to-spatial-ROI anchor.
+
+## Addendum: Multi-Lag EEG Token Memory
+
+The Schaefer spatial distiller now supports multiple EEG windows around the existing BOLD-aligned window. For each fMRI target the model receives five 8 s EEG windows at offsets -4, -2, 0, +2, and +4 s relative to the current hemodynamic alignment. LaBraM extracts channel tokens for every lag, a learned lag embedding is added, and ROI queries cross-attend to the expanded lag-by-channel memory. Windows that cannot support all five lags are dropped rather than padded.
+
+NatView one-fold result:
+
+| Setting | Real ROI r | Shifted-null ROI r | Time baseline ROI r | Note |
+| --- | ---: | ---: | ---: | --- |
+| Single-lag spatial distillation | 0.0221 | 0.0087 | 0.0083 | Earlier fold-1 run |
+| Five-lag spatial distillation | 0.0223 | -0.0081 | -0.0094 | Similar real r, much cleaner null separation |
+
+This did not materially raise the absolute NatView ROI correlation, but it made the control cleaner: the real EEG-fMRI alignment stays positive while circularly shifted fMRI supervision becomes negative. The next useful test is pooled multi-dataset training with the same five-lag memory, because the current result suggests the architecture can preserve alignment but may still be data-limited.

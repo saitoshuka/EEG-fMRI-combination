@@ -139,6 +139,7 @@ class DistillDataset(Dataset):
         window_samples: int,
         patch_samples: int,
         window_zscore: bool,
+        lag_offsets_samples: list[int] | np.ndarray | None = None,
     ):
         self.runs = runs
         self.table = table
@@ -151,6 +152,7 @@ class DistillDataset(Dataset):
         self.patch_samples = int(patch_samples)
         self.n_patches = self.window_samples // self.patch_samples
         self.window_zscore = bool(window_zscore)
+        self.lag_offsets_samples = [0] if lag_offsets_samples is None else [int(v) for v in lag_offsets_samples]
 
     def __len__(self) -> int:
         return len(self.valid_global_to_row)
@@ -161,14 +163,27 @@ class DistillDataset(Dataset):
         sample = int(self.table["sample_id"][global_idx])
         start = int(run.starts[sample])
         indices = meta["indices"]  # type: ignore[assignment]
-        window = run.data[indices, start : start + self.window_samples].astype(np.float32)
-        if self.window_zscore:
-            mean = window.mean(axis=-1, keepdims=True)
-            std = window.std(axis=-1, keepdims=True)
-            window = (window - mean) / np.maximum(std, 1e-6)
-        window = window.reshape(window.shape[0], self.n_patches, self.patch_samples)
+        windows = []
+        for offset in self.lag_offsets_samples:
+            offset_start = start + offset
+            offset_stop = offset_start + self.window_samples
+            if offset_start < 0 or offset_stop > run.data.shape[1]:
+                raise IndexError(
+                    f"lagged window out of bounds for run={run.path.name} sample={sample} "
+                    f"start={offset_start} stop={offset_stop} n_times={run.data.shape[1]}"
+                )
+            window = run.data[indices, offset_start:offset_stop].astype(np.float32)
+            if self.window_zscore:
+                mean = window.mean(axis=-1, keepdims=True)
+                std = window.std(axis=-1, keepdims=True)
+                window = (window - mean) / np.maximum(std, 1e-6)
+            windows.append(window.reshape(window.shape[0], self.n_patches, self.patch_samples))
+        if len(windows) == 1:
+            x_window = windows[0]
+        else:
+            x_window = np.stack(windows, axis=0)
         item = (
-            torch.from_numpy(window),
+            torch.from_numpy(x_window),
             torch.from_numpy(meta["coords"]),  # type: ignore[arg-type]
             meta["input_chans"],  # type: ignore[index]
             torch.tensor(self.dataset_to_id[run.dataset], dtype=torch.long),
@@ -201,10 +216,12 @@ class LaBraMSpatialDistiller(nn.Module):
         heads: int,
         layers: int,
         dropout: float,
+        max_lags: int = 16,
     ):
         super().__init__()
         self.labram = labram
         self.token_proj = nn.Linear(token_dim, d_model)
+        self.lag_embed = nn.Parameter(torch.zeros(max_lags, d_model))
         self.eeg_coord = nn.Sequential(nn.Linear(3, d_model), nn.GELU(), nn.Linear(d_model, d_model))
         self.fmri_coord = nn.Sequential(nn.Linear(3, d_model), nn.GELU(), nn.Linear(d_model, d_model))
         self.dataset_embed = nn.Embedding(n_datasets, d_model)
@@ -225,14 +242,29 @@ class LaBraMSpatialDistiller(nn.Module):
         self.norm = nn.LayerNorm(d_model)
         self.ffn = nn.Sequential(nn.Linear(d_model, d_model * 2), nn.GELU(), nn.Dropout(dropout), nn.Linear(d_model * 2, d_model))
         self.out = nn.Linear(d_model, 1)
+        nn.init.trunc_normal_(self.lag_embed, std=0.02)
 
     def forward(self, x, coords, input_chans, ds, fmri_coords, return_aux: bool = False):
-        tokens = self.labram.forward_features(x, input_chans=input_chans, return_all_tokens=True)
-        patch_tokens = tokens[:, 1:, :]
-        n_ch = x.shape[1]
-        n_patch = patch_tokens.shape[1] // n_ch
-        ch_tokens = patch_tokens.reshape(x.shape[0], n_ch, n_patch, patch_tokens.shape[-1]).mean(dim=2)
-        memory = self.token_proj(ch_tokens) + self.eeg_coord(coords)
+        if x.dim() == 5:
+            batch, n_lags, n_ch, _, _ = x.shape
+            if n_lags > self.lag_embed.shape[0]:
+                raise ValueError(f"got {n_lags} lag windows, but model only has {self.lag_embed.shape[0]} lag embeddings")
+            x_flat = x.reshape(batch * n_lags, n_ch, x.shape[-2], x.shape[-1])
+            tokens = self.labram.forward_features(x_flat, input_chans=input_chans, return_all_tokens=True)
+            patch_tokens = tokens[:, 1:, :]
+            n_patch = patch_tokens.shape[1] // n_ch
+            ch_tokens = patch_tokens.reshape(batch, n_lags, n_ch, n_patch, patch_tokens.shape[-1]).mean(dim=3)
+            eeg_coord = self.eeg_coord(coords).unsqueeze(1)
+            lag_coord = self.lag_embed[:n_lags].view(1, n_lags, 1, -1)
+            memory = self.token_proj(ch_tokens) + eeg_coord + lag_coord
+            memory = memory.reshape(batch, n_lags * n_ch, -1)
+        else:
+            tokens = self.labram.forward_features(x, input_chans=input_chans, return_all_tokens=True)
+            patch_tokens = tokens[:, 1:, :]
+            n_ch = x.shape[1]
+            n_patch = patch_tokens.shape[1] // n_ch
+            ch_tokens = patch_tokens.reshape(x.shape[0], n_ch, n_patch, patch_tokens.shape[-1]).mean(dim=2)
+            memory = self.token_proj(ch_tokens) + self.eeg_coord(coords)
         memory = self.eeg_encoder(memory)
         q = self.fmri_coord(fmri_coords).unsqueeze(0).expand(x.shape[0], -1, -1)
         q = q + self.dataset_embed(ds).unsqueeze(1)
