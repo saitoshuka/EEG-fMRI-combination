@@ -1,0 +1,842 @@
+{
+  "config": {
+    "dataset": [
+      "affective=data/montage_waveform_affective_v1/affective_waveform_cache.npz",
+      "experience=data/montage_waveform_multi_v1/experience_waveform_cache.npz",
+      "xp2=data/montage_waveform_multi_v1/xp2_waveform_cache.npz",
+      "sleep=/home/sudaxin/projects/paired_data/data/montage_waveform_multi_v2/sleep_waveform_cache.npz"
+    ],
+    "results_dir": "/home/sudaxin/projects/paired_data/results/waveform_token_lag_sweep_sleep_tf8_20260509",
+    "mode": "tf",
+    "lags": "-8:8",
+    "temporal_patches": 8,
+    "bands": "1-4,4-8,8-13,13-24",
+    "include_present_mask": false,
+    "clip": 20.0,
+    "seed": 31,
+    "folds": 3,
+    "max_folds": 3,
+    "test_frac": 0.25,
+    "block_steps": 64,
+    "gap_steps": 8,
+    "context_steps": 16,
+    "context_stride": 1,
+    "max_step_gap": 2,
+    "sequence_feature": "mean_last",
+    "detrend_degree": 1,
+    "target_pca_dim": 32,
+    "min_shift_steps": 20,
+    "time_harmonics": 6,
+    "alpha": 100.0
+  },
+  "meta": [
+    {
+      "dataset_name": "affective",
+      "lag": -8,
+      "n_samples": 19338,
+      "n_sequences": 19023,
+      "n_runs": 21,
+      "n_subjects": 21,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "affective",
+      "lag": -7,
+      "n_samples": 19359,
+      "n_sequences": 19044,
+      "n_runs": 21,
+      "n_subjects": 21,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "affective",
+      "lag": -6,
+      "n_samples": 19380,
+      "n_sequences": 19065,
+      "n_runs": 21,
+      "n_subjects": 21,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "affective",
+      "lag": -5,
+      "n_samples": 19401,
+      "n_sequences": 19086,
+      "n_runs": 21,
+      "n_subjects": 21,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "affective",
+      "lag": -4,
+      "n_samples": 19422,
+      "n_sequences": 19107,
+      "n_runs": 21,
+      "n_subjects": 21,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "affective",
+      "lag": -3,
+      "n_samples": 19443,
+      "n_sequences": 19128,
+      "n_runs": 21,
+      "n_subjects": 21,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "affective",
+      "lag": -2,
+      "n_samples": 19464,
+      "n_sequences": 19149,
+      "n_runs": 21,
+      "n_subjects": 21,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "affective",
+      "lag": -1,
+      "n_samples": 19485,
+      "n_sequences": 19170,
+      "n_runs": 21,
+      "n_subjects": 21,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "affective",
+      "lag": 0,
+      "n_samples": 19506,
+      "n_sequences": 19191,
+      "n_runs": 21,
+      "n_subjects": 21,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "affective",
+      "lag": 1,
+      "n_samples": 19485,
+      "n_sequences": 19170,
+      "n_runs": 21,
+      "n_subjects": 21,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "affective",
+      "lag": 2,
+      "n_samples": 19464,
+      "n_sequences": 19149,
+      "n_runs": 21,
+      "n_subjects": 21,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "affective",
+      "lag": 3,
+      "n_samples": 19443,
+      "n_sequences": 19128,
+      "n_runs": 21,
+      "n_subjects": 21,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "affective",
+      "lag": 4,
+      "n_samples": 19422,
+      "n_sequences": 19107,
+      "n_runs": 21,
+      "n_subjects": 21,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "affective",
+      "lag": 5,
+      "n_samples": 19401,
+      "n_sequences": 19086,
+      "n_runs": 21,
+      "n_subjects": 21,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "affective",
+      "lag": 6,
+      "n_samples": 19380,
+      "n_sequences": 19065,
+      "n_runs": 21,
+      "n_subjects": 21,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "affective",
+      "lag": 7,
+      "n_samples": 19359,
+      "n_sequences": 19044,
+      "n_runs": 21,
+      "n_subjects": 21,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "affective",
+      "lag": 8,
+      "n_samples": 19338,
+      "n_sequences": 19023,
+      "n_runs": 21,
+      "n_subjects": 21,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "experience",
+      "lag": -8,
+      "n_samples": 7717,
+      "n_sequences": 7357,
+      "n_runs": 24,
+      "n_subjects": 24,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "experience",
+      "lag": -7,
+      "n_samples": 7741,
+      "n_sequences": 7381,
+      "n_runs": 24,
+      "n_subjects": 24,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "experience",
+      "lag": -6,
+      "n_samples": 7765,
+      "n_sequences": 7405,
+      "n_runs": 24,
+      "n_subjects": 24,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "experience",
+      "lag": -5,
+      "n_samples": 7789,
+      "n_sequences": 7429,
+      "n_runs": 24,
+      "n_subjects": 24,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "experience",
+      "lag": -4,
+      "n_samples": 7813,
+      "n_sequences": 7453,
+      "n_runs": 24,
+      "n_subjects": 24,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "experience",
+      "lag": -3,
+      "n_samples": 7837,
+      "n_sequences": 7477,
+      "n_runs": 24,
+      "n_subjects": 24,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "experience",
+      "lag": -2,
+      "n_samples": 7861,
+      "n_sequences": 7501,
+      "n_runs": 24,
+      "n_subjects": 24,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "experience",
+      "lag": -1,
+      "n_samples": 7885,
+      "n_sequences": 7525,
+      "n_runs": 24,
+      "n_subjects": 24,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "experience",
+      "lag": 0,
+      "n_samples": 7909,
+      "n_sequences": 7549,
+      "n_runs": 24,
+      "n_subjects": 24,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "experience",
+      "lag": 1,
+      "n_samples": 7885,
+      "n_sequences": 7525,
+      "n_runs": 24,
+      "n_subjects": 24,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "experience",
+      "lag": 2,
+      "n_samples": 7861,
+      "n_sequences": 7501,
+      "n_runs": 24,
+      "n_subjects": 24,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "experience",
+      "lag": 3,
+      "n_samples": 7837,
+      "n_sequences": 7477,
+      "n_runs": 24,
+      "n_subjects": 24,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "experience",
+      "lag": 4,
+      "n_samples": 7813,
+      "n_sequences": 7453,
+      "n_runs": 24,
+      "n_subjects": 24,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "experience",
+      "lag": 5,
+      "n_samples": 7789,
+      "n_sequences": 7429,
+      "n_runs": 24,
+      "n_subjects": 24,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "experience",
+      "lag": 6,
+      "n_samples": 7765,
+      "n_sequences": 7405,
+      "n_runs": 24,
+      "n_subjects": 24,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "experience",
+      "lag": 7,
+      "n_samples": 7741,
+      "n_sequences": 7381,
+      "n_runs": 24,
+      "n_subjects": 24,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "experience",
+      "lag": 8,
+      "n_samples": 7717,
+      "n_sequences": 7357,
+      "n_runs": 24,
+      "n_subjects": 24,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "xp2",
+      "lag": -8,
+      "n_samples": 5338,
+      "n_sequences": 5083,
+      "n_runs": 17,
+      "n_subjects": 17,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "xp2",
+      "lag": -7,
+      "n_samples": 5355,
+      "n_sequences": 5100,
+      "n_runs": 17,
+      "n_subjects": 17,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "xp2",
+      "lag": -6,
+      "n_samples": 5372,
+      "n_sequences": 5117,
+      "n_runs": 17,
+      "n_subjects": 17,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "xp2",
+      "lag": -5,
+      "n_samples": 5389,
+      "n_sequences": 5134,
+      "n_runs": 17,
+      "n_subjects": 17,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "xp2",
+      "lag": -4,
+      "n_samples": 5406,
+      "n_sequences": 5151,
+      "n_runs": 17,
+      "n_subjects": 17,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "xp2",
+      "lag": -3,
+      "n_samples": 5423,
+      "n_sequences": 5168,
+      "n_runs": 17,
+      "n_subjects": 17,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "xp2",
+      "lag": -2,
+      "n_samples": 5440,
+      "n_sequences": 5185,
+      "n_runs": 17,
+      "n_subjects": 17,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "xp2",
+      "lag": -1,
+      "n_samples": 5457,
+      "n_sequences": 5202,
+      "n_runs": 17,
+      "n_subjects": 17,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "xp2",
+      "lag": 0,
+      "n_samples": 5474,
+      "n_sequences": 5219,
+      "n_runs": 17,
+      "n_subjects": 17,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "xp2",
+      "lag": 1,
+      "n_samples": 5457,
+      "n_sequences": 5202,
+      "n_runs": 17,
+      "n_subjects": 17,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "xp2",
+      "lag": 2,
+      "n_samples": 5440,
+      "n_sequences": 5185,
+      "n_runs": 17,
+      "n_subjects": 17,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "xp2",
+      "lag": 3,
+      "n_samples": 5423,
+      "n_sequences": 5168,
+      "n_runs": 17,
+      "n_subjects": 17,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "xp2",
+      "lag": 4,
+      "n_samples": 5406,
+      "n_sequences": 5151,
+      "n_runs": 17,
+      "n_subjects": 17,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "xp2",
+      "lag": 5,
+      "n_samples": 5389,
+      "n_sequences": 5134,
+      "n_runs": 17,
+      "n_subjects": 17,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "xp2",
+      "lag": 6,
+      "n_samples": 5372,
+      "n_sequences": 5117,
+      "n_runs": 17,
+      "n_subjects": 17,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "xp2",
+      "lag": 7,
+      "n_samples": 5355,
+      "n_sequences": 5100,
+      "n_runs": 17,
+      "n_subjects": 17,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "xp2",
+      "lag": 8,
+      "n_samples": 5338,
+      "n_sequences": 5083,
+      "n_runs": 17,
+      "n_subjects": 17,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "sleep",
+      "lag": -8,
+      "n_samples": 9009,
+      "n_sequences": 8514,
+      "n_runs": 33,
+      "n_subjects": 33,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "sleep",
+      "lag": -7,
+      "n_samples": 9042,
+      "n_sequences": 8547,
+      "n_runs": 33,
+      "n_subjects": 33,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "sleep",
+      "lag": -6,
+      "n_samples": 9075,
+      "n_sequences": 8580,
+      "n_runs": 33,
+      "n_subjects": 33,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "sleep",
+      "lag": -5,
+      "n_samples": 9108,
+      "n_sequences": 8613,
+      "n_runs": 33,
+      "n_subjects": 33,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "sleep",
+      "lag": -4,
+      "n_samples": 9141,
+      "n_sequences": 8646,
+      "n_runs": 33,
+      "n_subjects": 33,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "sleep",
+      "lag": -3,
+      "n_samples": 9174,
+      "n_sequences": 8679,
+      "n_runs": 33,
+      "n_subjects": 33,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "sleep",
+      "lag": -2,
+      "n_samples": 9207,
+      "n_sequences": 8712,
+      "n_runs": 33,
+      "n_subjects": 33,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "sleep",
+      "lag": -1,
+      "n_samples": 9240,
+      "n_sequences": 8745,
+      "n_runs": 33,
+      "n_subjects": 33,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "sleep",
+      "lag": 0,
+      "n_samples": 9273,
+      "n_sequences": 8778,
+      "n_runs": 33,
+      "n_subjects": 33,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "sleep",
+      "lag": 1,
+      "n_samples": 9240,
+      "n_sequences": 8745,
+      "n_runs": 33,
+      "n_subjects": 33,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "sleep",
+      "lag": 2,
+      "n_samples": 9207,
+      "n_sequences": 8712,
+      "n_runs": 33,
+      "n_subjects": 33,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "sleep",
+      "lag": 3,
+      "n_samples": 9174,
+      "n_sequences": 8679,
+      "n_runs": 33,
+      "n_subjects": 33,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "sleep",
+      "lag": 4,
+      "n_samples": 9141,
+      "n_sequences": 8646,
+      "n_runs": 33,
+      "n_subjects": 33,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "sleep",
+      "lag": 5,
+      "n_samples": 9108,
+      "n_sequences": 8613,
+      "n_runs": 33,
+      "n_subjects": 33,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "sleep",
+      "lag": 6,
+      "n_samples": 9075,
+      "n_sequences": 8580,
+      "n_runs": 33,
+      "n_subjects": 33,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "sleep",
+      "lag": 7,
+      "n_samples": 9042,
+      "n_sequences": 8547,
+      "n_runs": 33,
+      "n_subjects": 33,
+      "x_dim": 4096
+    },
+    {
+      "dataset_name": "sleep",
+      "lag": 8,
+      "n_samples": 9009,
+      "n_sequences": 8514,
+      "n_runs": 33,
+      "n_subjects": 33,
+      "x_dim": 4096
+    }
+  ],
+  "best_full_sweep": [
+    {
+      "dataset_name": "affective",
+      "mode": "tf",
+      "lag": -4,
+      "real_rank_pct": 0.5650834986772487,
+      "shifted_rank_pct": 0.4960716230936819,
+      "time_rank_pct": 0.5055378053999378,
+      "real_minus_shifted": 0.0690118755835668,
+      "real_minus_time": 0.05954569327731096,
+      "real_diag_minus_offdiag": 0.08597955674885589,
+      "residual_rank_pct": 0.5632284858387799,
+      "residual_shifted_rank_pct": 0.49040129940865235,
+      "residual_minus_shifted": 0.07282718643012759,
+      "residual_diag_minus_offdiag": 0.08378479036331843
+    },
+    {
+      "dataset_name": "experience",
+      "mode": "tf",
+      "lag": -4,
+      "real_rank_pct": 0.546033264130766,
+      "shifted_rank_pct": 0.5033708535630458,
+      "time_rank_pct": 0.5921172253441054,
+      "real_minus_shifted": 0.042662410567720244,
+      "real_minus_time": -0.04608396121333935,
+      "real_diag_minus_offdiag": 0.06408029990971502,
+      "residual_rank_pct": 0.5380231134323156,
+      "residual_shifted_rank_pct": 0.49032203778414263,
+      "residual_minus_shifted": 0.04770107564817294,
+      "residual_diag_minus_offdiag": 0.048422890348418755
+    },
+    {
+      "dataset_name": "sleep",
+      "mode": "tf",
+      "lag": -8,
+      "real_rank_pct": 0.5353159571909573,
+      "shifted_rank_pct": 0.5039106341189675,
+      "time_rank_pct": 0.5022471741221741,
+      "real_minus_shifted": 0.03140532307198973,
+      "real_minus_time": 0.033068783068783136,
+      "real_diag_minus_offdiag": 0.04615196020917059,
+      "residual_rank_pct": 0.5325276575276575,
+      "residual_shifted_rank_pct": 0.5028158569825237,
+      "residual_minus_shifted": 0.029711800545133782,
+      "residual_diag_minus_offdiag": 0.04503554167156309
+    },
+    {
+      "dataset_name": "xp2",
+      "mode": "tf",
+      "lag": 5,
+      "real_rank_pct": 0.5529156045255066,
+      "shifted_rank_pct": 0.5031558318266512,
+      "time_rank_pct": 0.524492670763199,
+      "real_minus_shifted": 0.04975977269885534,
+      "real_minus_time": 0.028422933762307534,
+      "real_diag_minus_offdiag": 0.06041457953880863,
+      "residual_rank_pct": 0.5429782656422896,
+      "residual_shifted_rank_pct": 0.4996176577844727,
+      "residual_minus_shifted": 0.04336060785781687,
+      "residual_diag_minus_offdiag": 0.04703550125268608
+    }
+  ],
+  "nested": [
+    {
+      "dataset_name": "affective",
+      "mode": "tf",
+      "heldout_fold": 1,
+      "selected_lag": -4,
+      "selection_resid_minus_shifted": 0.07232945261437912,
+      "heldout_residual_rank_pct": 0.5624737394957984,
+      "heldout_residual_shifted_rank_pct": 0.4886510854341737,
+      "heldout_residual_minus_shifted": 0.07382265406162469,
+      "heldout_residual_diag_minus_offdiag": 0.0830700440578342
+    },
+    {
+      "dataset_name": "affective",
+      "mode": "tf",
+      "heldout_fold": 2,
+      "selected_lag": -4,
+      "selection_resid_minus_shifted": 0.07411808473389356,
+      "heldout_residual_rank_pct": 0.5581422152194212,
+      "heldout_residual_shifted_rank_pct": 0.4878968253968254,
+      "heldout_residual_minus_shifted": 0.07024538982259582,
+      "heldout_residual_diag_minus_offdiag": 0.0731559043678754
+    },
+    {
+      "dataset_name": "affective",
+      "mode": "tf",
+      "heldout_fold": 3,
+      "selected_lag": -4,
+      "selection_resid_minus_shifted": 0.07203402194211025,
+      "heldout_residual_rank_pct": 0.5690695028011203,
+      "heldout_residual_shifted_rank_pct": 0.4946559873949579,
+      "heldout_residual_minus_shifted": 0.07441351540616242,
+      "heldout_residual_diag_minus_offdiag": 0.09512842266424566
+    },
+    {
+      "dataset_name": "experience",
+      "mode": "tf",
+      "heldout_fold": 1,
+      "selected_lag": -4,
+      "selection_resid_minus_shifted": 0.048971822115731894,
+      "heldout_residual_rank_pct": 0.5313292483824148,
+      "heldout_residual_shifted_rank_pct": 0.48616966566935976,
+      "heldout_residual_minus_shifted": 0.045159582713055035,
+      "heldout_residual_diag_minus_offdiag": 0.049318396217583
+    },
+    {
+      "dataset_name": "experience",
+      "mode": "tf",
+      "heldout_fold": 2,
+      "selected_lag": -4,
+      "selection_resid_minus_shifted": 0.04532764383794835,
+      "heldout_residual_rank_pct": 0.5495652492358651,
+      "heldout_residual_shifted_rank_pct": 0.497117309967243,
+      "heldout_residual_minus_shifted": 0.052447939268622124,
+      "heldout_residual_diag_minus_offdiag": 0.05942595049463456
+    },
+    {
+      "dataset_name": "experience",
+      "mode": "tf",
+      "heldout_fold": 3,
+      "selected_lag": -4,
+      "selection_resid_minus_shifted": 0.04880376099083858,
+      "heldout_residual_rank_pct": 0.5331748426786668,
+      "heldout_residual_shifted_rank_pct": 0.4876791377158251,
+      "heldout_residual_minus_shifted": 0.045495704962841665,
+      "heldout_residual_diag_minus_offdiag": 0.03652432433303871
+    },
+    {
+      "dataset_name": "sleep",
+      "mode": "tf",
+      "heldout_fold": 1,
+      "selected_lag": -1,
+      "selection_resid_minus_shifted": 0.028067129629629622,
+      "heldout_residual_rank_pct": 0.5128291847041847,
+      "heldout_residual_shifted_rank_pct": 0.5027882996632996,
+      "heldout_residual_minus_shifted": 0.010040885040885072,
+      "heldout_residual_diag_minus_offdiag": 0.029488282083413024
+    },
+    {
+      "dataset_name": "sleep",
+      "mode": "tf",
+      "heldout_fold": 2,
+      "selected_lag": -8,
+      "selection_resid_minus_shifted": 0.0302616943241944,
+      "heldout_residual_rank_pct": 0.541148088023088,
+      "heldout_residual_shifted_rank_pct": 0.5125360750360751,
+      "heldout_residual_minus_shifted": 0.02861201298701288,
+      "heldout_residual_diag_minus_offdiag": 0.05742303689134344
+    },
+    {
+      "dataset_name": "sleep",
+      "mode": "tf",
+      "heldout_fold": 3,
+      "selected_lag": -8,
+      "selection_resid_minus_shifted": 0.03537608225108227,
+      "heldout_residual_rank_pct": 0.5159632034632035,
+      "heldout_residual_shifted_rank_pct": 0.4975799663299663,
+      "heldout_residual_minus_shifted": 0.01838323713323714,
+      "heldout_residual_diag_minus_offdiag": 0.02627472381159549
+    },
+    {
+      "dataset_name": "xp2",
+      "mode": "tf",
+      "heldout_fold": 1,
+      "selected_lag": 5,
+      "selection_resid_minus_shifted": 0.04296504722036637,
+      "heldout_residual_rank_pct": 0.5458657734323134,
+      "heldout_residual_shifted_rank_pct": 0.5017140442995955,
+      "heldout_residual_minus_shifted": 0.04415172913271781,
+      "heldout_residual_diag_minus_offdiag": 0.052153925275243186
+    },
+    {
+      "dataset_name": "xp2",
+      "mode": "tf",
+      "heldout_fold": 2,
+      "selected_lag": 3,
+      "selection_resid_minus_shifted": 0.0565266416995141,
+      "heldout_residual_rank_pct": 0.5255150979122029,
+      "heldout_residual_shifted_rank_pct": 0.5142864755482475,
+      "heldout_residual_minus_shifted": 0.011228622363955387,
+      "heldout_residual_diag_minus_offdiag": 0.026604127010820725
+    },
+    {
+      "dataset_name": "xp2",
+      "mode": "tf",
+      "heldout_fold": 3,
+      "selected_lag": 7,
+      "selection_resid_minus_shifted": 0.037703721455044525,
+      "heldout_residual_rank_pct": 0.5511326993319574,
+      "heldout_residual_shifted_rank_pct": 0.5046566208904459,
+      "heldout_residual_minus_shifted": 0.04647607844151147,
+      "heldout_residual_diag_minus_offdiag": 0.05644262953813832
+    }
+  ]
+}
