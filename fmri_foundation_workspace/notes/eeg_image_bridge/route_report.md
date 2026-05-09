@@ -389,6 +389,74 @@ token-level spatial branch from scratch. The practical next step is to scale
 TRIBE target extraction first, then retry this branch with many more train
 images and ideally true anatomical visual ROI targets.
 
+## Visual And Semantic ROI Targets
+
+Scripts:
+
+```text
+fmri_foundation_workspace/scripts/extract_visual_roi_targets_from_tribe.py
+fmri_foundation_workspace/scripts/run_tribe_train_targets_chunk.sh
+fmri_foundation_workspace/scripts/combine_tribe_target_chunks.py
+```
+
+Design note:
+
+```text
+fmri_foundation_workspace/notes/eeg_image_bridge/visual_roi_spatial_loss_plan.md
+```
+
+TRIBE full-surface targets can now be converted into atlas-derived visual and
+semantic ROI targets using Nilearn's Destrieux `fsaverage5` surface atlas.
+
+Current converted targets:
+
+```text
+visual_roi_targets_train_seed33_n256.npz
+visual_roi_targets_n200.npz
+```
+
+Shapes:
+
+```text
+parcel_targets: [n_images, 38]
+group_targets:  [n_images, 12]
+```
+
+The groups include both low/mid-level visual areas and high-level semantic
+object-temporal cortex:
+
+```text
+early_calcarine
+medial_occipital
+lateral_occipital
+ventral_occipitotemporal
+inferior_temporal
+semantic_object_temporal
+```
+
+The proposed training loss should keep the original semantic CLIP objective as
+the main loss, then add small-weight visual/semantic ROI correlation,
+ROI-pattern contrastive loss, and semantic-spatial consistency. Initial weights:
+
+```text
+lambda_visual_roi = 0.1
+lambda_semantic_roi = 0.05
+lambda_spatial_contrastive = 0.1
+lambda_consistency = 0.05
+```
+
+Runtime estimate for expanding TRIBE train targets from the measured speed:
+
+| target size | estimated time |
+|---:|---:|
+| 512 | about 1.6 h |
+| 1024 | about 3.2 h |
+| 1654, one image per train class | about 5.2 h |
+| 16540, all train images | about 52.4 h |
+
+The full `16540` extraction should be chunked, for example `512` images per
+chunk, rather than run as one two-day job.
+
 ## What This Means For The Story
 
 The stronger story is no longer:

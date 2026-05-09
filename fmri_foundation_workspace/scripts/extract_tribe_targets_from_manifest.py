@@ -32,8 +32,15 @@ def main() -> int:
     parser.add_argument("--cache-folder", type=Path, default=DEFAULT_CACHE)
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     parser.add_argument("--limit", type=int, default=8)
+    parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--duration-sec", type=float, default=2.0)
     parser.add_argument("--device", default="cuda")
+    parser.add_argument(
+        "--save-raw-preds",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Store per-segment raw TRIBE predictions. Disable for large full-train chunks.",
+    )
     parser.add_argument(
         "--tag",
         default="",
@@ -46,6 +53,7 @@ def main() -> int:
     status: dict[str, object] = {
         "manifest": str(args.manifest),
         "limit": args.limit,
+        "offset": args.offset,
         "device": args.device,
         "cache_folder": str(args.cache_folder),
     }
@@ -54,7 +62,12 @@ def main() -> int:
         from tribev2 import TribeModel
 
         with args.manifest.open(newline="", encoding="utf-8") as f:
-            rows = list(csv.DictReader(f))[: args.limit]
+            all_rows = list(csv.DictReader(f))
+            rows = all_rows[args.offset : args.offset + args.limit]
+        if not rows:
+            raise ValueError(
+                f"No manifest rows selected with offset={args.offset}, limit={args.limit}, total={len(all_rows)}"
+            )
 
         events = []
         timelines = []
@@ -104,9 +117,11 @@ def main() -> int:
         targets_arr = np.stack(targets, axis=0)
 
         tag = f"{args.tag}_" if args.tag else ""
+        offset_tag = f"offset{args.offset}_" if args.offset else ""
         out_path = args.out_dir / f"tribe_targets_{tag}n{len(rows)}.npz"
-        np.savez_compressed(
-            out_path,
+        if args.offset:
+            out_path = args.out_dir / f"tribe_targets_{tag}{offset_tag}n{len(rows)}.npz"
+        payload = dict(
             targets=targets_arr,
             timelines=np.array(timelines),
             image_index=np.array([int(row["image_index"]) for row in rows]),
@@ -116,14 +131,17 @@ def main() -> int:
             segment_timeline=np.array([row["timeline"] for row in segment_rows]),
             segment_start=np.array([row["start"] for row in segment_rows]),
             segment_duration=np.array([row["duration"] for row in segment_rows]),
-            raw_preds=preds.astype(np.float32),
         )
+        if args.save_raw_preds:
+            payload["raw_preds"] = preds.astype(np.float32)
+        np.savez_compressed(out_path, **payload)
         status.update(
             {
                 "ok": True,
                 "out_path": str(out_path),
                 "target_shape": list(targets_arr.shape),
                 "raw_pred_shape": list(preds.shape),
+                "save_raw_preds": bool(args.save_raw_preds),
                 "missing_timelines": missing,
                 "target_mean": float(np.nanmean(targets_arr)),
                 "target_std": float(np.nanstd(targets_arr)),
@@ -135,7 +153,8 @@ def main() -> int:
         status["traceback"] = traceback.format_exc()
 
     tag = f"{args.tag}_" if args.tag else ""
-    status_path = args.out_dir / f"tribe_targets_status_{tag}n{args.limit}.json"
+    offset_tag = f"offset{args.offset}_" if args.offset else ""
+    status_path = args.out_dir / f"tribe_targets_status_{tag}{offset_tag}n{args.limit}.json"
     status_path.write_text(json.dumps(status, indent=2), encoding="utf-8")
     print(f"Wrote {status_path}")
     if not status.get("ok"):

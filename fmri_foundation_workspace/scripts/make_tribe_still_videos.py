@@ -24,6 +24,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--limit", type=int, default=8)
+    parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--duration-sec", type=float, default=2.0)
     parser.add_argument("--fps", type=int, default=10)
     parser.add_argument("--overwrite", action="store_true")
@@ -44,7 +45,7 @@ def main() -> int:
         rows = list(csv.DictReader(f))
 
     made = 0
-    for row in rows[: args.limit]:
+    for row in rows[args.offset : args.offset + args.limit]:
         image_path = Path(row["image_path"])
         out_path = Path(row["tribe_still_video_path"])
         if out_path.exists() and not args.overwrite:
@@ -70,7 +71,10 @@ def main() -> int:
         subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         made += 1
 
-    print(f"Created or confirmed {made} still videos from {args.manifest}")
+    print(
+        f"Created {made} still videos from {args.manifest} "
+        f"(offset={args.offset}, limit={args.limit})"
+    )
     return 0
 
 
