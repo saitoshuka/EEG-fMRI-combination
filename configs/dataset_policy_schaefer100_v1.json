@@ -1,0 +1,137 @@
+{
+  "version": "schaefer100_policy_v1",
+  "created": "2026-05-09",
+  "goal": "Gate multi-dataset EEG-to-fMRI experiments so timing, task structure, artifact status, and target coverage are handled per dataset.",
+  "common_rules": {
+    "target_space": "Use Schaefer100 as a common auxiliary readout/evaluation target. Do not treat it as the only teacher latent once MNI-volume/NeuroSTORM latents are available.",
+    "timing": "Preserve sample_time and target_sample_time in every feature cache. Report lag in steps and actual seconds.",
+    "roi_mask": "Use ROI mask loss or exclude runs with incomplete atlas coverage from unmasked shared-target training.",
+    "nulls": ["shifted target within run", "time/block-only model", "subject-heldout split", "within-run block split with gap"],
+    "eeg_channels": "Keep EEG channels only for model input; use ECG/EOG/CWL/stimulus/response channels for QC or artifact regression, not as EEG tokens."
+  },
+  "datasets": {
+    "NatView_NKI_EEG_fMRI_Naturalistic_Viewing": {
+      "tier": "A_anchor",
+      "local_status": "derivative-heavy local copy; EEG sidecars present, BOLD JSON not found by generic BIDS scan",
+      "tr_seconds": 2.1,
+      "policy": ["keep NatView-specific 5-volume timing provenance", "split rest/movie/checkerboard", "use Schaefer100 for evaluation and MNI/NeuroSTORM latent for teacher when possible"]
+    },
+    "Affective_music_listening_OpenNeuro_ds002725": {
+      "tier": "A",
+      "local_status": "paired BIDS present; current Schaefer100 raw cache usable",
+      "tr_seconds": 2.0,
+      "eeg_reference": "FCz",
+      "policy": ["trust documented first-TTL-to-first-fMRI alignment", "do not redo scanner-noise AAS on already corrected EEG", "model music/block/FEELTRACE phase as nuisance or control"]
+    },
+    "gradCPT_simultaneous_EEG_fMRI_DTI_OpenNeuro_ds006040": {
+      "tier": "A_after_derivative_check",
+      "local_status": "large paired BIDS present; raw cache exists but official derivatives should be checked",
+      "tr_seconds": 2.0,
+      "eeg_reference": "FCz",
+      "policy": ["prefer official preprocessed derivatives", "separate rest/checkerboard/gradCPT/imagery", "use checkerboard as EEG-fMRI canary"]
+    },
+    "Sleep_rest_EEG_fMRI_OpenNeuro_ds003768": {
+      "tier": "B_state_conditioned",
+      "local_status": "paired BIDS present; sleep staging should be imported",
+      "tr_seconds": 2.1,
+      "eeg_reference": "FCz",
+      "policy": ["condition or split by sleep stage", "exclude unscorable epochs", "interpret success as state-mediated coupling unless spatial nulls pass"]
+    },
+    "Multi_session_EEG_fMRI_experience_sampling_OpenNeuro_ds007216": {
+      "tier": "B_task_conditioned",
+      "local_status": "paired BIDS present; many runs and CWL/MISC channels",
+      "tr_seconds": 2.0,
+      "policy": ["trim terminal marker mismatches", "model GradCPT/rest/experience-sampling prompts", "use session/day as split and nuisance factor"]
+    },
+    "Motor_imagery_neurofeedback_XP1_OpenNeuro_ds002336": {
+      "tier": "C_nf_auxiliary",
+      "local_status": "paired BIDS present but local EEG sidecar count is sparse",
+      "tr_seconds": 2.0,
+      "eeg_reference": "FCz",
+      "policy": ["use motor imagery/NF blocks", "use provided NF scores as auxiliary targets when available", "do not pool as generic rest"]
+    },
+    "Motor_imagery_neurofeedback_XP2_OpenNeuro_ds002338": {
+      "tier": "C_nf_auxiliary_masked",
+      "local_status": "paired BIDS present; incomplete Schaefer100 coverage in current proxy extraction",
+      "tr_seconds": 1.0,
+      "eeg_reference": "FCz",
+      "policy": ["report lag using sample_time, not fixed 2 s steps", "use ROI mask loss or exclude from unmasked shared-target training", "use NF/block targets"]
+    },
+    "Synchronous_inner_speech_OpenNeuro_ds006033": {
+      "tier": "C_small_importer_needed",
+      "local_status": "small paired BIDS present",
+      "tr_seconds": 2.0,
+      "eeg_reference": "FCz",
+      "policy": ["build a bespoke importer", "treat as small task-specific validation only"]
+    },
+    "Speeded_perceptual_judgments_confidence_OpenNeuro_ds002158": {
+      "tier": "hold_until_eeg_recovered",
+      "local_status": "fMRI present; no EEG sidecars found locally",
+      "tr_seconds": 1.28,
+      "policy": ["recover EEG source before use", "event-lock to response/confidence rather than generic continuous windows"]
+    },
+    "Confidence_perceptual_decisions_OpenNeuro_ds002739": {
+      "tier": "hold_fmri_only_local",
+      "local_status": "fMRI present; no EEG sidecars found locally",
+      "tr_seconds": 2.0,
+      "policy": ["exclude from paired training unless EEG source is found"]
+    },
+    "Value_based_decisions_OpenNeuro_ds002734": {
+      "tier": "hold_fmri_only_local",
+      "local_status": "fMRI present; no EEG sidecars found locally",
+      "tr_seconds": 2.5,
+      "policy": ["exclude from paired training unless EEG source is found"]
+    },
+    "Auditory_and_Visual_Oddball_EEG_fMRI_OpenNeuro_ds000116_fMRI_only_BIDS": {
+      "tier": "hold_legacy_pairing_needed",
+      "local_status": "BIDS fMRI present; README points EEG to legacy OpenfMRI release",
+      "tr_seconds": 2.0,
+      "policy": ["pair legacy EEG to BIDS fMRI before use", "event-lock oddball conditions"]
+    },
+    "Auditory_and_Visual_Oddball_EEG_fMRI_OpenfMRI_ds116_legacy_EEG": {
+      "tier": "hold_legacy_pairing_needed",
+      "local_status": "legacy EEG folder not recognized by generic BIDS scan",
+      "policy": ["write custom legacy EEG importer", "pair with ds000116 fMRI"]
+    },
+    "Auditory_oddball_pupillometry_EEG_fMRI_Figshare_He_Hong_Sajda": {
+      "tier": "hold_custom_importer",
+      "local_status": "not recognized by generic BIDS scan",
+      "policy": ["inspect archive manually", "keep pupillometry as nuisance/control if paired"]
+    },
+    "Binocular_rivalry_simultaneous_EEG_fMRI_Dryad_bf1b1": {
+      "tier": "hold_custom_importer",
+      "local_status": "not recognized by generic BIDS scan",
+      "policy": ["inspect archive manually", "event/state labels likely required"]
+    },
+    "CWL_NITRC_EEG_fMRI_artifact": {
+      "tier": "hold_artifact_resource",
+      "local_status": "not recognized by generic BIDS scan",
+      "policy": ["use as artifact-removal method resource before using as paired training"]
+    },
+    "CineBrain_HuggingFace_Fudan_fMRI": {
+      "tier": "hold_fmri_only",
+      "local_status": "README-like metadata found, no paired EEG detected",
+      "policy": ["do not use for EEG-to-fMRI paired training"]
+    },
+    "EEG_fMRI_NODDI_OSF_94c5t": {
+      "tier": "hold_custom_importer",
+      "local_status": "not recognized by generic BIDS scan",
+      "policy": ["inspect OSF structure manually", "likely useful later for multimodal structural context"]
+    },
+    "NIMH_Vanderbilt_ME_REST_TASK_multi_echo_EEG_fMRI_Figshare_28225415": {
+      "tier": "hold_custom_importer",
+      "local_status": "not recognized by generic BIDS scan",
+      "policy": ["inspect archive manually", "multi-echo denoising policy needed"]
+    },
+    "Schrooten_separate_vs_simultaneous_EEG_fMRI_Zenodo_1507643": {
+      "tier": "hold_custom_importer",
+      "local_status": "README detected, BIDS scan found no files",
+      "policy": ["separate simultaneous vs non-simultaneous recordings", "do not mix separate EEG and fMRI as paired"]
+    },
+    "SevenT_simultaneous_EEG_fMRI_rest_Zenodo_15781280": {
+      "tier": "hold_custom_importer",
+      "local_status": "not recognized by generic BIDS scan",
+      "policy": ["7T artifact profile is different; use dedicated QC before pairing"]
+    }
+  }
+}

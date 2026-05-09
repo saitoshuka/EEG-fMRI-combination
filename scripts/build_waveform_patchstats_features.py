@@ -70,22 +70,33 @@ def run(args: argparse.Namespace) -> None:
     run_id = wave["run"].astype(str)
     sample_id = wave["sample_id"].astype(np.int32)
     keep, target = shift_targets(run_id, sample_id, args.target_lag_steps)
+    lag_seconds_nominal = float(args.target_lag_steps * args.step_seconds)
+    lag_seconds_actual = lag_seconds_nominal
+    payload: dict[str, object] = {
+        "X": x[keep].astype(np.float32),
+        "Z": wave["Y"].astype(np.float32)[target],
+        "subject": wave["subject"][keep],
+        "run": wave["run"][keep],
+        "sample_id": wave["sample_id"][keep],
+        "time_frac": wave["time_frac"][keep],
+        "feature_mode": f"spatial_bandpower_plus_waveform_patchstats_targetlag_{args.target_lag_steps:+d}",
+        "target_kind": "schaefer100",
+        "lag_steps": np.asarray(args.target_lag_steps, dtype=np.int32),
+        "lag_seconds_nominal": np.asarray(lag_seconds_nominal, dtype=np.float32),
+        "patches": np.asarray(args.patches, dtype=np.int32),
+        "source_cache": str(args.waveform_cache),
+    }
+    if "sample_time" in wave.files:
+        st = wave["sample_time"].astype(np.float32)
+        target_delta = st[target] - st[keep]
+        lag_seconds_actual = float(np.nanmedian(target_delta)) if target_delta.size else lag_seconds_nominal
+        payload["sample_time"] = st[keep]
+        payload["target_sample_time"] = st[target]
+        payload["target_lag_seconds_per_sample"] = target_delta.astype(np.float32)
+    payload["lag_seconds"] = np.asarray(lag_seconds_actual, dtype=np.float32)
+    payload["lag_seconds_actual"] = np.asarray(lag_seconds_actual, dtype=np.float32)
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
-        args.output,
-        X=x[keep].astype(np.float32),
-        Z=wave["Y"].astype(np.float32)[target],
-        subject=wave["subject"][keep],
-        run=wave["run"][keep],
-        sample_id=wave["sample_id"][keep],
-        time_frac=wave["time_frac"][keep],
-        feature_mode=f"spatial_bandpower_plus_waveform_patchstats_targetlag_{args.target_lag_steps:+d}",
-        target_kind="schaefer100",
-        lag_steps=np.asarray(args.target_lag_steps, dtype=np.int32),
-        lag_seconds=np.asarray(args.target_lag_steps * args.step_seconds, dtype=np.float32),
-        patches=np.asarray(args.patches, dtype=np.int32),
-        source_cache=str(args.waveform_cache),
-    )
+    np.savez_compressed(args.output, **payload)
     print(
         {
             "output": str(args.output),

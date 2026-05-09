@@ -165,6 +165,7 @@ def build_waveform_cache(args: argparse.Namespace) -> Path:
     runs: list[str] = []
     sample_ids: list[int] = []
     time_frac: list[float] = []
+    sample_time: list[float] = []
     manifest = []
     actual_wave_sfreq = None
     wave_samples = None
@@ -181,6 +182,10 @@ def build_waveform_cache(args: argparse.Namespace) -> Path:
             tf = z["time_frac"].astype(np.float32)
         else:
             tf = np.linspace(0, 1, starts.size, dtype=np.float32)
+        if "sample_time" in z.files:
+            st = z["sample_time"].astype(np.float32)
+        else:
+            st = starts.astype(np.float32) / max(sfreq, 1e-9)
 
         ch_to_raw: dict[str, int] = {}
         for raw_idx, ch in enumerate(channels):
@@ -213,10 +218,11 @@ def build_waveform_cache(args: argparse.Namespace) -> Path:
             raise RuntimeError(f"Inconsistent downsampled window size: {wave_samples} vs {win_ds}")
 
         good = (starts >= 0) & (starts + win_raw <= raw.shape[1])
-        n = min(int(good.sum()), y.shape[0], tf.shape[0])
+        n = min(int(good.sum()), y.shape[0], tf.shape[0], st.shape[0])
         starts = starts[good][:n]
         y = y[:n]
-        tf = tf[:n]
+        tf = tf[good[: tf.shape[0]]][:n]
+        st = st[good[: st.shape[0]]][:n]
         x_run = np.zeros((n, len(canonical), win_ds), dtype=np.float16)
         starts_ds = np.round(starts * (ds_sfreq / sfreq)).astype(np.int64)
         for j, s in enumerate(starts_ds):
@@ -231,6 +237,7 @@ def build_waveform_cache(args: argparse.Namespace) -> Path:
         runs.extend([run] * n)
         sample_ids.extend(range(n))
         time_frac.extend(tf.tolist())
+        sample_time.extend(st.tolist())
         manifest.append(
             {
                 "path": str(path),
@@ -257,6 +264,7 @@ def build_waveform_cache(args: argparse.Namespace) -> Path:
         run=np.asarray(runs, dtype="U160"),
         sample_id=np.asarray(sample_ids, dtype=np.int32),
         time_frac=np.asarray(time_frac, dtype=np.float32),
+        sample_time=np.asarray(sample_time, dtype=np.float32),
         channels=np.asarray(canonical, dtype="U16"),
         channel_coord=coord.astype(np.float32),
         wave_sfreq=np.asarray(actual_wave_sfreq, dtype=np.float32),

@@ -45,6 +45,8 @@ def main() -> None:
     run = z["run"].astype(str)
     sample_id = z["sample_id"].astype(np.int64)
     keep, target = shifted_indices(run, sample_id, args.target_lag_steps)
+    lag_seconds_nominal = float(args.target_lag_steps * args.step_seconds)
+    lag_seconds_actual = lag_seconds_nominal
 
     payload: dict[str, object] = {
         "X": z["X"][keep].astype(np.float32),
@@ -54,8 +56,17 @@ def main() -> None:
         "sample_id": z["sample_id"][keep],
         "source_feature": str(args.feature_path),
         "target_lag_steps": np.asarray(args.target_lag_steps, dtype=np.int32),
-        "target_lag_seconds": np.asarray(args.target_lag_steps * args.step_seconds, dtype=np.float32),
+        "target_lag_seconds_nominal": np.asarray(lag_seconds_nominal, dtype=np.float32),
     }
+    if "sample_time" in z.files:
+        st = z["sample_time"].astype(np.float32)
+        target_delta = st[target] - st[keep]
+        lag_seconds_actual = float(np.nanmedian(target_delta)) if target_delta.size else lag_seconds_nominal
+        payload["sample_time"] = st[keep]
+        payload["target_sample_time"] = st[target]
+        payload["target_lag_seconds_per_sample"] = target_delta.astype(np.float32)
+    payload["target_lag_seconds"] = np.asarray(lag_seconds_actual, dtype=np.float32)
+    payload["target_lag_seconds_actual"] = np.asarray(lag_seconds_actual, dtype=np.float32)
     for key in ("time_frac", "dataset", "bands", "feature_mode"):
         if key in z.files:
             arr = z[key]

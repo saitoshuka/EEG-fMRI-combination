@@ -40,12 +40,15 @@ DEFAULT_FEATURE = REPO_ROOT / "data/montage_waveform_affective_v1/affective_spat
 DEFAULT_RESULTS = REPO_ROOT / "results/target_lag_sweep_affective_patchstats_ridge"
 
 
-def lagged_arrays(z: np.lib.npyio.NpzFile, lag: int) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def lagged_arrays(
+    z: np.lib.npyio.NpzFile, lag: int, fallback_step_seconds: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, float, str]:
     x0 = z["X"].astype(np.float32)
     y0 = z["Z"].astype(np.float32)
     run0 = z["run"].astype(str)
     sid0 = z["sample_id"].astype(np.int32)
     subject0 = z["subject"].astype(str)
+    time0 = z["sample_time"].astype(np.float32) if "sample_time" in z.files else None
     keep: list[int] = []
     target: list[int] = []
     for r in np.unique(run0):
@@ -59,7 +62,13 @@ def lagged_arrays(z: np.lib.npyio.NpzFile, lag: int) -> tuple[np.ndarray, np.nda
                 target.append(int(idx[tpos]))
     keep_a = np.asarray(keep, dtype=np.int64)
     target_a = np.asarray(target, dtype=np.int64)
-    return x0[keep_a], y0[target_a], run0[keep_a], sid0[keep_a], subject0[keep_a]
+    if time0 is not None and keep_a.size:
+        lag_seconds = float(np.nanmedian(time0[target_a] - time0[keep_a]))
+        lag_source = "sample_time"
+    else:
+        lag_seconds = float(lag * fallback_step_seconds)
+        lag_source = "nominal_step_seconds"
+    return x0[keep_a], y0[target_a], run0[keep_a], sid0[keep_a], subject0[keep_a], lag_seconds, lag_source
 
 
 def run(args: argparse.Namespace) -> None:
@@ -68,7 +77,7 @@ def run(args: argparse.Namespace) -> None:
     all_rows: list[MetricRow] = []
     summary = []
     for lag in args.lags:
-        x, y_raw, run_id, sample_id, _subject = lagged_arrays(z, lag)
+        x, y_raw, run_id, sample_id, _subject, lag_seconds, lag_source = lagged_arrays(z, lag, args.step_seconds)
         y = zscore_detrend_by_run(y_raw, run_id, degree=args.detrend_degree)
         seq_idx, target_idx = build_sequence_index(run_id, sample_id, args.context_steps, 1, args.max_step_gap)
         folds = make_within_run_block_folds(
@@ -117,7 +126,14 @@ def run(args: argparse.Namespace) -> None:
                 "r2",
             ]
         ].mean().to_dict()
-        agg.update({"lag_steps": lag, "lag_sec": lag * args.step_seconds, "n_samples": int(x.shape[0])})
+        agg.update(
+            {
+                "lag_steps": lag,
+                "lag_sec": lag_seconds,
+                "lag_sec_source": lag_source,
+                "n_samples": int(x.shape[0]),
+            }
+        )
         summary.append(agg)
         print(agg, flush=True)
 
@@ -144,6 +160,7 @@ def run(args: argparse.Namespace) -> None:
         f"- Feature cache: `{args.feature_path}`",
         f"- Target PCA dim: {args.target_pca_dim}",
         f"- Ridge alpha: {args.alpha:g}",
+        "- Lag seconds: inferred from `sample_time` when present, otherwise nominal `--step-seconds`.",
         "",
         "| lag steps | lag sec | rank pct | diag-off | row r | target r | R2 | n |",
         "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",

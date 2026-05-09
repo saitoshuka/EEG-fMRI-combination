@@ -246,7 +246,7 @@ def build_features(args: argparse.Namespace) -> dict[str, dict[str, object]]:
             files = files[: args.max_runs]
         x_sum, x_spat = [], []
         z_targets, z_masks = [], []
-        subjects, runs, sample_ids, time_frac = [], [], [], []
+        subjects, runs, sample_ids, time_frac, sample_time = [], [], [], [], []
         qc_rows: list[QcRow] = []
         manifests = []
         for i, path in enumerate(files, start=1):
@@ -262,6 +262,10 @@ def build_features(args: argparse.Namespace) -> dict[str, dict[str, object]]:
                     tf_all = z["time_frac"].astype(np.float32)
                 else:
                     tf_all = np.linspace(0, 1, starts.size, dtype=np.float32)
+                if "sample_time" in z.files:
+                    st_all = z["sample_time"].astype(np.float32)
+                else:
+                    st_all = starts.astype(np.float32) / max(sfreq, 1e-9)
                 sum_feat, spat_feat, montage, good = window_bandpower_features(
                     raw,
                     channels,
@@ -271,7 +275,7 @@ def build_features(args: argparse.Namespace) -> dict[str, dict[str, object]]:
                     args.batch_size,
                     args.max_montage_channels,
                 )
-                n = min(sum_feat.shape[0], starts.size, tf_all.size)
+                n = min(sum_feat.shape[0], starts.size, tf_all.size, st_all.size)
                 sum_feat = sum_feat[:n]
                 spat_feat = spat_feat[:n]
                 x_sum.append(sum_feat)
@@ -285,10 +289,12 @@ def build_features(args: argparse.Namespace) -> dict[str, dict[str, object]]:
                     y_mask = y_mask[good[: y_mask.shape[0]]][:n]
                     z_masks.append(y_mask)
                 tf_sel = tf_all[good[: tf_all.shape[0]]][:n]
+                st_sel = st_all[good[: st_all.shape[0]]][:n]
                 subjects.extend([subject] * n)
                 runs.extend([run] * n)
                 sample_ids.extend(range(n))
                 time_frac.extend(tf_sel.tolist())
+                sample_time.extend(st_sel.tolist())
                 qc_rows.append(compute_run_qc(raw, channels, sfreq, dataset, run, subject, n, args.max_montage_channels))
                 manifests.append(
                     {
@@ -314,6 +320,7 @@ def build_features(args: argparse.Namespace) -> dict[str, dict[str, object]]:
             "run": np.asarray(runs, dtype="U160"),
             "sample_id": np.asarray(sample_ids, dtype=np.int32),
             "time_frac": np.asarray(time_frac, dtype=np.float32),
+            "sample_time": np.asarray(sample_time, dtype=np.float32),
             "dataset": np.asarray(dataset, dtype="U64"),
             "bands": np.asarray([b[0] for b in BANDS], dtype="U16"),
         }
