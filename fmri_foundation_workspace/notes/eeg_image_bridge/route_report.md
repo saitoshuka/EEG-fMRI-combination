@@ -210,6 +210,75 @@ for both real and shifted because the low-rank reconstruction captures a strong
 shared cortical template, so retrieval metrics and real-vs-shifted rank gaps
 are the cleaner readout here.
 
+## Train-Size Scaling: THINGS Train to Test200
+
+Script:
+
+```text
+fmri_foundation_workspace/scripts/train_atm_to_tribe_scaling.py
+```
+
+Output note:
+
+```text
+fmri_foundation_workspace/notes/eeg_image_bridge/atm_to_tribe_scaling.md
+```
+
+This is stricter than the repeated split above. TRIBE targets were extracted
+for 256 sampled THINGS train images, then small ridge heads were trained on
+32/64/128/256 train images and evaluated on the fixed 200 THINGS test images.
+
+Both target styles were evaluated:
+
+- full cortex: direct prediction of 20,484 fsaverage5 vertices;
+- latent: prediction of a fixed 32D PCA basis fit once on all 256 extracted
+  train targets, then reused for every train-size condition.
+
+ATM EEG mean-subject results:
+
+| train images | full rank pct | shifted | full gap | latent rank pct | shifted | latent gap |
+|---:|---:|---:|---:|---:|---:|---:|
+| 32 | 0.8030 | 0.4643 | 0.3387 | 0.8523 | 0.4745 | 0.3777 |
+| 64 | 0.8459 | 0.4677 | 0.3782 | 0.9098 | 0.4704 | 0.4395 |
+| 128 | 0.8810 | 0.4683 | 0.4127 | 0.9388 | 0.4735 | 0.4653 |
+| 256 | 0.9042 | 0.4760 | 0.4282 | 0.9561 | 0.4821 | 0.4740 |
+
+This is a clean positive scaling trend: adding train images improves both full
+cortex retrieval and low-rank latent retrieval on the held-out test200 set,
+while the shifted target control stays near chance.
+
+CLIP image-feature ceiling under the same train/test split:
+
+| train images | full rank pct | shifted | full gap | latent rank pct | shifted | latent gap |
+|---:|---:|---:|---:|---:|---:|---:|
+| 32 | 0.7245 | 0.4963 | 0.2281 | 0.7444 | 0.4990 | 0.2454 |
+| 64 | 0.7870 | 0.4938 | 0.2932 | 0.8282 | 0.4896 | 0.3386 |
+| 128 | 0.8279 | 0.4880 | 0.3399 | 0.8683 | 0.4911 | 0.3772 |
+| 256 | 0.8273 | 0.5103 | 0.3170 | 0.8715 | 0.5123 | 0.3592 |
+
+The EEG head is using already-trained ATM EEG embeddings, so this should be
+interpreted as a post-hoc alignment result, not as raw EEG directly beating an
+image model. The useful conclusion is that the ATM EEG representation has a
+stable, sample-scaling path into TRIBE cortical space.
+
+## Spatial Supervision Design
+
+Design note:
+
+```text
+fmri_foundation_workspace/notes/eeg_image_bridge/tribe_spatial_supervision_plan.md
+```
+
+The next training experiment should add TRIBE supervision as a post-training
+adapter or small-head fine-tuning stage before attempting full joint training.
+The target should not be treated as 20,484 independent MSE labels. Use a
+structured brain-space objective:
+
+- fixed low-rank TRIBE latent;
+- contrastive/ranking loss in latent space;
+- low-weight surface reconstruction loss;
+- spatial controls such as vertex shuffling and category-heldout evaluation.
+
 ## What This Means For The Story
 
 The stronger story is no longer:

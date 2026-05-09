@@ -34,6 +34,11 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=8)
     parser.add_argument("--duration-sec", type=float, default=2.0)
     parser.add_argument("--device", default="cuda")
+    parser.add_argument(
+        "--tag",
+        default="",
+        help="Optional filename tag, e.g. train_seed33, to avoid split collisions.",
+    )
     args = parser.parse_args()
 
     args.cache_folder.mkdir(parents=True, exist_ok=True)
@@ -98,7 +103,8 @@ def main() -> int:
                 targets.append(np.stack(values, axis=0).mean(axis=0).astype(np.float32))
         targets_arr = np.stack(targets, axis=0)
 
-        out_path = args.out_dir / f"tribe_targets_n{len(rows)}.npz"
+        tag = f"{args.tag}_" if args.tag else ""
+        out_path = args.out_dir / f"tribe_targets_{tag}n{len(rows)}.npz"
         np.savez_compressed(
             out_path,
             targets=targets_arr,
@@ -128,7 +134,8 @@ def main() -> int:
         status["error"] = repr(exc)
         status["traceback"] = traceback.format_exc()
 
-    status_path = args.out_dir / f"tribe_targets_status_n{args.limit}.json"
+    tag = f"{args.tag}_" if args.tag else ""
+    status_path = args.out_dir / f"tribe_targets_status_{tag}n{args.limit}.json"
     status_path.write_text(json.dumps(status, indent=2), encoding="utf-8")
     print(f"Wrote {status_path}")
     if not status.get("ok"):
