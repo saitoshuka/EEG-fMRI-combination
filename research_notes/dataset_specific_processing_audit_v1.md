@@ -14,7 +14,7 @@ Local audit script:
 
 Important local differences:
 
-| Dataset | Local BOLD JSON | Local EEG JSON | TR | EEG sampling | EEG ref | Immediate implication |
+| Dataset | Local BOLD JSON | Local EEG evidence | TR | EEG sampling | EEG ref | Immediate implication |
 | --- | ---: | ---: | --- | --- | --- | --- |
 | NatView | 0 | 40 | n/a in local BIDS scan | 250 Hz | Ave | Anchor dataset, but local copy is derivative/EEG-heavy; keep NatView-specific timing provenance. |
 | Affective ds002725 | 105 | 105 | 2.0 s | 1000 Hz in sidecars; 200 Hz in raw cache | FCz | EEG is already scanner-noise corrected by AAS; TTL alignment is unusually well documented. |
@@ -22,7 +22,7 @@ Important local differences:
 | XP2 ds002338 | 89 | 4 | 1.0 s | 5000 Hz sidecars | FCz | Prior lag reports using fixed 2 s steps are misleading for seconds; use `sample_time`. |
 | Experience ds007216 | 374 | 186 | 2.0 s | 5000 Hz | n/a | Has CWL sensors and known terminal trigger caveats; prompt/task phase must be modeled. |
 | Sleep ds003768 | 255 | 2 | 2.1 s | 250 Hz sidecars in local files; paper/OpenNeuro says raw 5000 Hz | FCz | Sleep stage labels are central; do not pool wake/N1/N2/N3 blindly. |
-| Speeded ds002158 | 140 | 0 | 1.28 s | missing locally | n/a | Paper has simultaneous EEG-fMRI, but current local BIDS scan has no EEG sidecars; exclude until EEG source is recovered. |
+| Speeded ds002158 | 140 | BrainVision EEG files present, but no `_eeg.json` | 1.28 s | not in sidecar | n/a | Usable through the BrainVision importer/provenance path; treat as event-conditioned, not generic rest. |
 | gradCPT ds006040 | 280 | 391 | 2.0 s | 5000 Hz | FCz | Large modern dataset with raw and preprocessed releases; separate rest/checkerboard/gradCPT/imagery. |
 | Synchronous inner speech ds006033 | 6 | 5 | 2.0 s | 5000 Hz | FCz | Small but likely usable after bespoke importer. |
 | Confidence ds002739 / Value ds002734 | 48 / 44 | 0 | 2.0 / 2.5 s | missing locally | n/a | fMRI-only in current download; cannot be used for paired EEG training as-is. |
@@ -98,9 +98,9 @@ The paper used simultaneous EEG-fMRI to relate confidence-related EEG decoders t
 
 Policy:
 
-- Do not use generic 8 s continuous windows unless the EEG files are recovered and event timing is implemented.
+- Do not use generic 8 s continuous windows unless event timing is implemented.
 - This dataset is better as an event-informed EEG-to-fMRI validation: EEG decoder or response-locked latent -> fMRI GLM/ROI latent.
-- Current local download has fMRI but no EEG sidecars, so it is excluded from paired training for now.
+- Local BrainVision EEG files exist, but `_eeg.json` sidecars are absent. It should not be excluded outright, but provenance of the BrainVision importer must be checked before scaling.
 
 ### gradCPT ds006040
 
@@ -122,6 +122,26 @@ I fixed a timing provenance problem in the current scripts:
 - `scripts/montage_raw_waveform_distill.py` now preserves `sample_time` in waveform caches.
 - `scripts/build_waveform_patchstats_features.py` and `scripts/shift_feature_targets.py` now save `sample_time`, `target_sample_time`, nominal lag seconds, and actual lag seconds when available.
 - `scripts/target_lag_sweep.py` now reports lag seconds from `sample_time` when available, otherwise falling back to nominal `--step-seconds`.
+- `scripts/audit_run_cache_timing_and_coverage.py` audits derived run caches for real sample step and Schaefer100 ROI coverage.
+
+## Derived Run Cache Audit
+
+Output:
+
+- `results/dataset_source_metadata_audit/run_cache_quality_summary.csv`
+- `results/dataset_source_metadata_audit/run_cache_quality_report.md`
+
+Current Schaefer100-compatible derived cache coverage:
+
+| Dataset | Runs | Subjects | Windows | Actual step | ROI mean/min | Notes |
+| --- | ---: | ---: | ---: | ---: | --- | --- |
+| Affective | 21 | 21 | 19,506 | 2.0 s | 100/100 | Good Tier A candidate. |
+| XP2 | 17 | 17 | 5,474 | 1.0 s | 86.8/80 | Masked-loss only; old lag-seconds labels were misleading. |
+| Experience | 24 | 24 | 7,909 | 2.0 s | 100/100 | Needs prompt/task/time controls. |
+| Sleep | 33 | 33 | 9,273 | 2.1 s | 100/100 | Needs sleep-stage conditioning. |
+| Speeded | 19 | 19 | 6,883 | 1.28 s | 100/100 | BrainVision EEG exists; event-conditioned tier. |
+| gradCPT | 28 | 28 | 3,113 | 2.0 s | 100/100 | Only CBOFF/ECOFF in current cache; official derivative/task split check needed. |
+| NatView | 44 | 22 | 11,638 | 2.1 s | 100/100 | NeuroSTORM latent present for 22 runs; anchor remains useful. |
 
 Smoke validation:
 
@@ -142,7 +162,8 @@ Smoke validation:
    - Tier A: NatView, Affective, gradCPT after official derivative check.
    - Tier B: Sleep and Experience with state/task-conditioned splits.
    - Tier C: XP1/XP2 with NF-score auxiliary objectives and ROI masks.
-   - Holdout/unusable until importer fix: Speeded, Confidence, Value, Oddball legacy, non-BIDS archive folders.
+   - Holdout/unusable until importer fix: Confidence, Value, Oddball legacy, non-BIDS archive folders.
+   - Event-conditioned tier: Speeded, because BrainVision EEG files exist locally but BIDS EEG JSON metadata are absent.
 
 ## Current Interpretation
 

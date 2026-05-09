@@ -1,0 +1,113 @@
+{
+  "roots": [
+    "data/pooled_raw_schaefer100_mni_proxy_full_mask_min80/run_cache",
+    "data/pooled_raw_schaefer100_neurostorm_official_natview_labram_eeg/run_cache"
+  ],
+  "summary": [
+    {
+      "dataset": "Affective_music_listening_OpenNeuro_ds002725",
+      "n_runs": 21,
+      "n_subjects": 21,
+      "n_windows": 19506,
+      "tasks": "classicalMusic",
+      "sfreq_values": "200",
+      "sample_step_median": 2.0,
+      "sample_step_min": 2.0,
+      "sample_step_max": 2.0,
+      "roi_valid_mean": 100.0,
+      "roi_valid_min": 100.0,
+      "roi_ge95_fraction": 1.0,
+      "neurostorm_runs": 0
+    },
+    {
+      "dataset": "Motor_imagery_neurofeedback_XP2_OpenNeuro_ds002338",
+      "n_runs": 17,
+      "n_subjects": 17,
+      "n_windows": 5474,
+      "tasks": "1dNF|2dNF",
+      "sfreq_values": "200",
+      "sample_step_median": 1.0,
+      "sample_step_min": 1.0,
+      "sample_step_max": 1.0,
+      "roi_valid_mean": 86.82352941176471,
+      "roi_valid_min": 80.0,
+      "roi_ge95_fraction": 0.0,
+      "neurostorm_runs": 0
+    },
+    {
+      "dataset": "Multi_session_EEG_fMRI_experience_sampling_OpenNeuro_ds007216",
+      "n_runs": 24,
+      "n_subjects": 24,
+      "n_windows": 7909,
+      "tasks": "ExperienceSampling",
+      "sfreq_values": "200",
+      "sample_step_median": 2.0,
+      "sample_step_min": 2.0,
+      "sample_step_max": 2.0,
+      "roi_valid_mean": 100.0,
+      "roi_valid_min": 100.0,
+      "roi_ge95_fraction": 1.0,
+      "neurostorm_runs": 0
+    },
+    {
+      "dataset": "Sleep_rest_EEG_fMRI_OpenNeuro_ds003768",
+      "n_runs": 33,
+      "n_subjects": 33,
+      "n_windows": 9273,
+      "tasks": "rest",
+      "sfreq_values": "200",
+      "sample_step_median": 2.100006103515625,
+      "sample_step_min": 2.100006103515625,
+      "sample_step_max": 2.100006103515625,
+      "roi_valid_mean": 100.0,
+      "roi_valid_min": 100.0,
+      "roi_ge95_fraction": 1.0,
+      "neurostorm_runs": 0
+    },
+    {
+      "dataset": "Speeded_perceptual_judgments_confidence_OpenNeuro_ds002158",
+      "n_runs": 19,
+      "n_subjects": 19,
+      "n_windows": 6883,
+      "tasks": "main",
+      "sfreq_values": "200",
+      "sample_step_median": 1.279998779296875,
+      "sample_step_min": 1.279998779296875,
+      "sample_step_max": 1.279998779296875,
+      "roi_valid_mean": 100.0,
+      "roi_valid_min": 100.0,
+      "roi_ge95_fraction": 1.0,
+      "neurostorm_runs": 0
+    },
+    {
+      "dataset": "gradCPT_simultaneous_EEG_fMRI_DTI_OpenNeuro_ds006040",
+      "n_runs": 28,
+      "n_subjects": 28,
+      "n_windows": 3113,
+      "tasks": "CBOFF|ECOFF",
+      "sfreq_values": "200",
+      "sample_step_median": 2.0,
+      "sample_step_min": 2.0,
+      "sample_step_max": 2.0,
+      "roi_valid_mean": 100.0,
+      "roi_valid_min": 100.0,
+      "roi_ge95_fraction": 1.0,
+      "neurostorm_runs": 0
+    },
+    {
+      "dataset": "natview",
+      "n_runs": 44,
+      "n_subjects": 22,
+      "n_windows": 11638,
+      "tasks": "rest",
+      "sfreq_values": "200",
+      "sample_step_median": 2.100006103515625,
+      "sample_step_min": 2.100006103515625,
+      "sample_step_max": 2.100006103515625,
+      "roi_valid_mean": 100.0,
+      "roi_valid_min": 100.0,
+      "roi_ge95_fraction": 1.0,
+      "neurostorm_runs": 22
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+dataset,n_runs,n_subjects,n_windows,neurostorm_runs,roi_ge95_fraction,roi_valid_mean,roi_valid_min,sample_step_max,sample_step_median,sample_step_min,sfreq_values,tasks
+Affective_music_listening_OpenNeuro_ds002725,21,21,19506,0,1.0,100.0,100.0,2.0,2.0,2.0,200,classicalMusic
+Motor_imagery_neurofeedback_XP2_OpenNeuro_ds002338,17,17,5474,0,0.0,86.82352941176471,80.0,1.0,1.0,1.0,200,1dNF|2dNF
+Multi_session_EEG_fMRI_experience_sampling_OpenNeuro_ds007216,24,24,7909,0,1.0,100.0,100.0,2.0,2.0,2.0,200,ExperienceSampling
+Sleep_rest_EEG_fMRI_OpenNeuro_ds003768,33,33,9273,0,1.0,100.0,100.0,2.100006103515625,2.100006103515625,2.100006103515625,200,rest
+Speeded_perceptual_judgments_confidence_OpenNeuro_ds002158,19,19,6883,0,1.0,100.0,100.0,1.279998779296875,1.279998779296875,1.279998779296875,200,main
+gradCPT_simultaneous_EEG_fMRI_DTI_OpenNeuro_ds006040,28,28,3113,0,1.0,100.0,100.0,2.0,2.0,2.0,200,CBOFF|ECOFF
+natview,44,22,11638,22,1.0,100.0,100.0,2.100006103515625,2.100006103515625,2.100006103515625,200,rest

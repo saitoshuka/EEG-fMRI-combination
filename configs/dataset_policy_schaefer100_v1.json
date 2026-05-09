@@ -65,10 +65,10 @@
       "policy": ["build a bespoke importer", "treat as small task-specific validation only"]
     },
     "Speeded_perceptual_judgments_confidence_OpenNeuro_ds002158": {
-      "tier": "hold_until_eeg_recovered",
-      "local_status": "fMRI present; no EEG sidecars found locally",
+      "tier": "C_event_conditioned_brainvision",
+      "local_status": "fMRI and BrainVision EEG files present; no _eeg.json sidecars found locally",
       "tr_seconds": 1.28,
-      "policy": ["recover EEG source before use", "event-lock to response/confidence rather than generic continuous windows"]
+      "policy": ["audit BrainVision importer provenance before scaling", "event-lock to response/confidence rather than generic continuous windows", "report lag using sample_time because TR is 1.28 s"]
     },
     "Confidence_perceptual_decisions_OpenNeuro_ds002739": {
       "tier": "hold_fmri_only_local",

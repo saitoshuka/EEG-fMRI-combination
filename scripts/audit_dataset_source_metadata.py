@@ -69,6 +69,9 @@ def audit_dataset(path: Path) -> dict[str, object]:
     desc = read_json(path / "dataset_description.json")
     bold_jsons = sorted(path.rglob("*_bold.json"))
     eeg_jsons = sorted(path.rglob("*_eeg.json"))
+    eeg_vhdrs = sorted(path.rglob("*_eeg.vhdr"))
+    eeg_sets = sorted(path.rglob("*_eeg.set"))
+    eeg_edfs = sorted(path.rglob("*_eeg.edf"))
     channel_tsvs = sorted(path.rglob("*_channels.tsv"))
     event_tsvs = sorted(path.rglob("*_events.tsv"))
     bold_files = sorted(path.rglob("*_bold.nii*"))
@@ -97,6 +100,9 @@ def audit_dataset(path: Path) -> dict[str, object]:
         "bold_task_names": "|".join(scalar_values(bold_jsons, "TaskName")),
         "n_eeg_json": len(eeg_jsons),
         "n_eeg_files": len(eeg_files),
+        "n_eeg_vhdr_files": len(eeg_vhdrs),
+        "n_eeg_set_files": len(eeg_sets),
+        "n_eeg_edf_files": len(eeg_edfs),
         "eeg_sampling_frequency": "|".join(scalar_values(eeg_jsons, "SamplingFrequency")),
         "eeg_reference": "|".join(scalar_values(eeg_jsons, "EEGReference")),
         "eeg_task_names": "|".join(scalar_values(eeg_jsons, "TaskName")),
@@ -124,14 +130,15 @@ def main() -> None:
         f"- Datasets: {len(frame)}",
         f"- CSV: `{args.output_dir / 'local_metadata_summary.csv'}`",
         "",
-        "| dataset | bold files | eeg files | TR | EEG Hz | EEG ref | event min |",
-        "| --- | ---: | ---: | --- | --- | --- | ---: |",
+        "| dataset | bold files | EEG JSON | EEG files | VHDR | TR | EEG Hz | EEG ref | event min |",
+        "| --- | ---: | ---: | ---: | ---: | --- | --- | --- | ---: |",
     ]
     for row in frame.to_dict("records"):
         event_min = row["event_onset_min"]
         event_txt = "" if pd.isna(event_min) else f"{float(event_min):.3f}"
         lines.append(
-            f"| {row['dataset']} | {row['n_bold_files']} | {row['n_eeg_files']} | "
+            f"| {row['dataset']} | {row['n_bold_files']} | {row['n_eeg_json']} | "
+            f"{row['n_eeg_files']} | {row['n_eeg_vhdr_files']} | "
             f"{row['tr_values']} | {row['eeg_sampling_frequency']} | {row['eeg_reference']} | {event_txt} |"
         )
     (args.output_dir / "local_metadata_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
