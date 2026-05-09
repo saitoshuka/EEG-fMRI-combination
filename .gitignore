@@ -37,10 +37,28 @@ data/labram_frozen_v1*/
 data/neurostorm*/
 data/eeg_raw_bandpower_controls*/
 data/montage_waveform*/
+data/policy_canary_spatialband_v3/
+data/pooled_raw_schaefer100_neurostorm_official_natview_labram_eeg/
+data/labram_neurostorm_retrieval_natview_labram_eeg/
+data/labram_retrieval_schaefer100_affective/
 results/**/*.npz
 results/**/cache/
 results/**/pid
 results/**/run.log
+
+# Local generated helper artifacts from large paired-data downloads.
+downloads/README.md
+downloads/aws_config
+NAT_VIEW_download_links.sh
+natview_rest_*_manifest.txt
+processed_file_list.csv
+research_notes/tribev2/*.html
+research_notes/tribev2/*.txt
+scripts/download_non_openneuro_paired.sh
+scripts/download_openneuro_paired_minimal.sh
+scripts/resume_nonopenneuro_after_active.sh
+scripts/start_openneuro_download_tmux.sh
+scripts/watch_nonopenneuro_status.sh
 
 # CATD reproduction local extracts and derived arrays.
 catd_reproduction/data/
