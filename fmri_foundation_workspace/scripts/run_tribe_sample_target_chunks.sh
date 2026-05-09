@@ -9,8 +9,11 @@ MANIFEST=${MANIFEST:-fmri_foundation_workspace/results/eeg_image_bridge/manifest
 TOTAL=${TOTAL:-1654}
 CHUNK_SIZE=${CHUNK_SIZE:-256}
 TAG=${TAG:-train_seed33_classbalanced1654}
+CHECKPOINTS=${CHECKPOINTS:-}
+RUN_VALIDATION=${RUN_VALIDATION:-0}
 LOG_DIR=${LOG_DIR:-fmri_foundation_workspace/results/eeg_image_bridge/logs}
 TARGET_DIR=${TARGET_DIR:-fmri_foundation_workspace/results/eeg_image_bridge/tribe_targets}
+VALIDATION_DIR=${VALIDATION_DIR:-fmri_foundation_workspace/results/eeg_image_bridge/budget_validations}
 
 mkdir -p "${LOG_DIR}" "${TARGET_DIR}"
 LOG="${LOG_DIR}/tribe_${TAG}_chunks.log"
@@ -22,6 +25,8 @@ echo "manifest=${MANIFEST}"
 echo "total=${TOTAL}"
 echo "chunk_size=${CHUNK_SIZE}"
 echo "tag=${TAG}"
+echo "checkpoints=${CHECKPOINTS}"
+echo "run_validation=${RUN_VALIDATION}"
 echo "log=${LOG}"
 
 if [[ ! -f "${MANIFEST}" ]]; then
@@ -30,6 +35,51 @@ if [[ ! -f "${MANIFEST}" ]]; then
 fi
 
 chunk_paths=()
+done_checkpoints=()
+
+checkpoint_done() {
+  local value=$1
+  local item
+  for item in "${done_checkpoints[@]:-}"; do
+    if [[ "${item}" == "${value}" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+combine_and_validate() {
+  local checkpoint=$1
+  local combined="${TARGET_DIR}/tribe_targets_${TAG}_n${checkpoint}.npz"
+  local val_tag="${TAG}_n${checkpoint}"
+
+  echo
+  echo "--- checkpoint ${checkpoint}: combine -> ${combined} ---"
+  "${EEG_PY}" fmri_foundation_workspace/scripts/combine_tribe_target_chunks.py \
+    "${chunk_paths[@]}" \
+    --out "${combined}"
+
+  echo
+  echo "--- checkpoint ${checkpoint}: visual ROI targets ---"
+  "${EEG_PY}" fmri_foundation_workspace/scripts/extract_visual_roi_targets_from_tribe.py "${combined}"
+
+  if [[ "${RUN_VALIDATION}" == "1" ]]; then
+    local validation_csv="${VALIDATION_DIR}/budget_validation_${val_tag}.csv"
+    if [[ -s "${validation_csv}" ]]; then
+      echo "Validation exists; skipping: ${validation_csv}"
+    else
+      echo
+      echo "--- checkpoint ${checkpoint}: lightweight ATM -> TRIBE validation ---"
+      "${EEG_PY}" fmri_foundation_workspace/scripts/validate_atm_to_tribe_budget.py \
+        --train-targets "${combined}" \
+        --tag "${val_tag}" \
+        --out-dir "${VALIDATION_DIR}"
+    fi
+  fi
+
+  done_checkpoints+=("${checkpoint}")
+}
+
 offset=0
 while [[ "${offset}" -lt "${TOTAL}" ]]; do
   remaining=$((TOTAL - offset))
@@ -65,19 +115,32 @@ while [[ "${offset}" -lt "${TOTAL}" ]]; do
   fi
 
   "${EEG_PY}" fmri_foundation_workspace/scripts/extract_visual_roi_targets_from_tribe.py "${chunk}"
+
+  done_count=$((offset + limit))
+  if [[ -n "${CHECKPOINTS}" ]]; then
+    IFS=',' read -ra checkpoint_values <<< "${CHECKPOINTS}"
+    for checkpoint in "${checkpoint_values[@]}"; do
+      if [[ -n "${checkpoint}" ]] && [[ "${done_count}" -ge "${checkpoint}" ]] && ! checkpoint_done "${checkpoint}"; then
+        combine_and_validate "${checkpoint}"
+      fi
+    done
+  fi
+
   offset=$((offset + limit))
 done
 
 combined="${TARGET_DIR}/tribe_targets_${TAG}_n${TOTAL}.npz"
-echo
-echo "--- combining chunks -> ${combined} ---"
-"${EEG_PY}" fmri_foundation_workspace/scripts/combine_tribe_target_chunks.py \
-  "${chunk_paths[@]}" \
-  --out "${combined}"
+if ! checkpoint_done "${TOTAL}"; then
+  echo
+  echo "--- combining chunks -> ${combined} ---"
+  "${EEG_PY}" fmri_foundation_workspace/scripts/combine_tribe_target_chunks.py \
+    "${chunk_paths[@]}" \
+    --out "${combined}"
 
-echo
-echo "--- extracting final visual ROI targets ---"
-"${EEG_PY}" fmri_foundation_workspace/scripts/extract_visual_roi_targets_from_tribe.py "${combined}"
+  echo
+  echo "--- extracting final visual ROI targets ---"
+  "${EEG_PY}" fmri_foundation_workspace/scripts/extract_visual_roi_targets_from_tribe.py "${combined}"
+fi
 
 echo
 echo "done"
