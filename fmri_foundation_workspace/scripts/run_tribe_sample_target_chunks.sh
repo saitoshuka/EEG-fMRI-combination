@@ -11,6 +11,7 @@ CHUNK_SIZE=${CHUNK_SIZE:-256}
 TAG=${TAG:-train_seed33_classbalanced1654}
 CHECKPOINTS=${CHECKPOINTS:-}
 RUN_VALIDATION=${RUN_VALIDATION:-0}
+FAST_STILL=${FAST_STILL:-0}
 LOG_DIR=${LOG_DIR:-fmri_foundation_workspace/results/eeg_image_bridge/logs}
 TARGET_DIR=${TARGET_DIR:-fmri_foundation_workspace/results/eeg_image_bridge/tribe_targets}
 VALIDATION_DIR=${VALIDATION_DIR:-fmri_foundation_workspace/results/eeg_image_bridge/budget_validations}
@@ -27,6 +28,7 @@ echo "chunk_size=${CHUNK_SIZE}"
 echo "tag=${TAG}"
 echo "checkpoints=${CHECKPOINTS}"
 echo "run_validation=${RUN_VALIDATION}"
+echo "fast_still=${FAST_STILL}"
 echo "log=${LOG}"
 
 if [[ ! -f "${MANIFEST}" ]]; then
@@ -105,13 +107,24 @@ while [[ "${offset}" -lt "${TOTAL}" ]]; do
       --offset "${offset}" \
       --limit "${limit}"
 
-    "${TRIBE_PY}" fmri_foundation_workspace/scripts/extract_tribe_targets_from_manifest.py \
-      --manifest "${MANIFEST}" \
-      --offset "${offset}" \
-      --limit "${limit}" \
-      --device cuda \
-      --tag "${TAG}" \
-      --no-save-raw-preds
+    if [[ "${FAST_STILL}" == "1" ]]; then
+      "${TRIBE_PY}" fmri_foundation_workspace/scripts/extract_tribe_targets_fast_still.py \
+        --manifest "${MANIFEST}" \
+        --offset "${offset}" \
+        --limit "${limit}" \
+        --device cuda \
+        --tag "${TAG}" \
+        --cache-folder "fmri_foundation_workspace/cache/tribe_cuda_faststill_${TAG}" \
+        --no-save-raw-preds
+    else
+      "${TRIBE_PY}" fmri_foundation_workspace/scripts/extract_tribe_targets_from_manifest.py \
+        --manifest "${MANIFEST}" \
+        --offset "${offset}" \
+        --limit "${limit}" \
+        --device cuda \
+        --tag "${TAG}" \
+        --no-save-raw-preds
+    fi
   fi
 
   "${EEG_PY}" fmri_foundation_workspace/scripts/extract_visual_roi_targets_from_tribe.py "${chunk}"

@@ -252,6 +252,33 @@ Still-video creation is not the bottleneck. TRIBE video encoding/inference is.
 The full `16540` run should be chunked, for example `512` images per chunk, so
 that failures do not lose two days of work.
 
+### Fast Still-Video Extraction
+
+Because THINGS images are converted into static 2-second still videos, the
+official TRIBE video extractor redundantly encodes near-identical temporal
+clips. The fast-still extractor encodes one representative video clip per image,
+repeats that feature over the expected temporal positions, and then leaves the
+TRIBE dataloader and brain model unchanged.
+
+Script:
+
+```text
+fmri_foundation_workspace/scripts/extract_tribe_targets_fast_still.py
+```
+
+Benchmark against the official first 8 targets from the 4096 manifest:
+
+```text
+mean target correlation: 0.9996
+min target correlation:  0.9990
+MAE:                    0.0014
+RMSE:                   0.0024
+```
+
+Observed inference-stage speed improved from about `11 s/image` to about
+`2.9 s/image` on the RTX 5070 Ti. Use this path for large still-image target
+extraction, while keeping the official extractor for any real video input.
+
 Chunk runner:
 
 ```text
