@@ -279,6 +279,37 @@ structured brain-space objective:
 - low-weight surface reconstruction loss;
 - spatial controls such as vertex shuffling and category-heldout evaluation.
 
+## Post-Training Adapter Retrieval Check
+
+Script:
+
+```text
+fmri_foundation_workspace/scripts/train_atm_tribe_adapter.py
+```
+
+Output note:
+
+```text
+fmri_foundation_workspace/notes/eeg_image_bridge/atm_tribe_adapter.md
+```
+
+The first adapter check kept the ATM EEG embeddings frozen and trained only a
+small residual adapter plus TRIBE latent head. The key question was whether the
+adapted EEG embedding improves CLIP image retrieval on unseen test200 images.
+
+Result: it did not improve retrieval.
+
+| model | test CLIP image top1 | top5 | rank pct | test TRIBE latent rank pct |
+|---|---:|---:|---:|---:|
+| frozen ATM embedding | 0.5200 | 0.8550 | 0.9854 | 0.9561 |
+| best validation-selected adapter | 0.5200 | 0.8550 | 0.9854 | 0.9186 |
+| best actual embedding-changing adapter | 0.5000 | 0.7700 | 0.9780 | 0.9109 |
+
+The useful conclusion is conservative: TRIBE supervision should first be added
+as an auxiliary brain-space branch or head while keeping the strong ATM/CLIP
+retrieval embedding stable. Directly modifying the retrieval embedding with
+only 256 TRIBE-labeled train images tends to hurt retrieval.
+
 ## What This Means For The Story
 
 The stronger story is no longer:
