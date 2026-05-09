@@ -62,6 +62,9 @@ def target_from_cache(z: np.lib.npyio.NpzFile, target_kind: str) -> tuple[np.nda
             mask = z["Y_mask"].astype(np.float32)
             if mask.shape == teacher.shape:
                 teacher = teacher * mask
+            elif mask.ndim == 2 and mask.shape[1] == teacher.shape[1]:
+                n = min(mask.shape[0], teacher.shape[0])
+                teacher = teacher[:n] * mask[:n]
             elif mask.ndim == 1 and mask.size == teacher.shape[1]:
                 teacher = teacher * mask.reshape(1, -1)
             else:

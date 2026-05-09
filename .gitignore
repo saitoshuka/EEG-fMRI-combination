@@ -41,6 +41,8 @@ data/policy_canary_spatialband_v3/
 data/pooled_raw_schaefer100_neurostorm_official_natview_labram_eeg/
 data/labram_neurostorm_retrieval_natview_labram_eeg/
 data/labram_retrieval_schaefer100_affective/
+data/labram_schaefer100_retrieval_natview_labram_eeg/
+data/waveform_token_features_v1/
 results/**/*.npz
 results/**/cache/
 results/**/pid
