@@ -65,25 +65,32 @@ DEFAULT_OUT_DIR = WORKSPACE / "results" / "eeg_image_bridge" / "atm_roi_spatial_
 
 
 class Config:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        d_model: int = 250,
+        n_heads: int = 4,
+        e_layers: int = 1,
+        dropout: float = 0.25,
+        d_ff: int = 256,
+    ) -> None:
         self.task_name = "classification"
         self.seq_len = 250
         self.pred_len = 250
         self.output_attention = False
-        self.d_model = 250
+        self.d_model = d_model
         self.embed = "timeF"
         self.freq = "h"
-        self.dropout = 0.25
+        self.dropout = dropout
         self.factor = 1
-        self.n_heads = 4
-        self.e_layers = 1
-        self.d_ff = 256
+        self.n_heads = n_heads
+        self.e_layers = e_layers
+        self.d_ff = d_ff
         self.activation = "gelu"
         self.enc_in = 63
 
 
 class iTransformer(nn.Module):
-    def __init__(self, configs: Config, joint_train: bool = True, num_subjects: int = 10):
+    def __init__(self, configs: Config, joint_train: bool = True, num_subjects: int | None = 10):
         super().__init__()
         self.enc_embedding = DataEmbedding(
             configs.seq_len,
@@ -143,6 +150,11 @@ class PatchEmbedding(nn.Module):
             Rearrange("b e (h) (w) -> b (h w) e"),
         )
 
+    @staticmethod
+    def output_tokens(input_width: int) -> int:
+        after_conv = input_width - 25 + 1
+        return (after_conv - 51) // 5 + 1
+
     def forward(self, x: Tensor) -> Tensor:
         x = x.unsqueeze(1)
         x = self.tsconv(x)
@@ -164,8 +176,10 @@ class FlattenHead(nn.Module):
 
 
 class EncEeg(nn.Sequential):
-    def __init__(self, emb_size: int = 40):
+    def __init__(self, input_width: int = 250, emb_size: int = 40):
+        flat_dim = PatchEmbedding.output_tokens(input_width) * emb_size
         super().__init__(PatchEmbedding(emb_size), FlattenHead())
+        self.flat_dim = flat_dim
 
 
 class ProjEeg(nn.Sequential):
@@ -288,20 +302,43 @@ class AtmSemanticSpatial(nn.Module):
         vertex_counts: np.ndarray | None,
         group_features: torch.Tensor | None = None,
         num_subjects: int = 10,
-        joint_train: bool = True,
+        subject_mode: str = "token",
+        atm_d_model: int = 250,
+        atm_heads: int = 4,
+        atm_layers: int = 1,
+        atm_dropout: float = 0.25,
+        atm_d_ff: int = 256,
         use_spatial: bool = True,
     ):
         super().__init__()
-        default_config = Config()
-        self.encoder = iTransformer(default_config, joint_train=joint_train, num_subjects=num_subjects)
-        self.enc_eeg = EncEeg()
-        self.proj_eeg = ProjEeg()
+        default_config = Config(
+            d_model=atm_d_model,
+            n_heads=atm_heads,
+            e_layers=atm_layers,
+            dropout=atm_dropout,
+            d_ff=atm_d_ff,
+        )
+        use_subject_token = subject_mode == "token"
+        self.encoder = iTransformer(
+            default_config,
+            joint_train=use_subject_token,
+            num_subjects=num_subjects if use_subject_token else None,
+        )
+        self.subject_mode = subject_mode
+        self.atm_d_model = atm_d_model
+        self.enc_eeg = EncEeg(input_width=atm_d_model)
+        self.proj_eeg = ProjEeg(embedding_dim=self.enc_eeg.flat_dim)
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
         self.loss_func = ClipLoss()
         self.use_spatial = use_spatial
         if use_spatial:
             assert roi_names is not None and vertex_counts is not None
-            self.roi_branch = OrderedRoiQueryBranch(roi_names, vertex_counts, group_features=group_features)
+            self.roi_branch = OrderedRoiQueryBranch(
+                roi_names,
+                vertex_counts,
+                group_features=group_features,
+                token_dim=atm_d_model,
+            )
 
     def forward(self, x: Tensor, subject_ids: Tensor) -> dict[str, Tensor]:
         tokens = self.encoder(x, None, subject_ids)
@@ -483,6 +520,12 @@ def main() -> int:
     parser.add_argument("--lambda-roi", type=float, default=0.1)
     parser.add_argument("--lambda-roi-col", type=float, default=0.01)
     parser.add_argument("--lambda-spatial", type=float, default=0.1)
+    parser.add_argument("--atm-d-model", type=int, default=250)
+    parser.add_argument("--atm-heads", type=int, default=4)
+    parser.add_argument("--atm-layers", type=int, default=1)
+    parser.add_argument("--atm-dropout", type=float, default=0.25)
+    parser.add_argument("--atm-d-ff", type=int, default=256)
+    parser.add_argument("--subject-mode", choices=["token", "none"], default="token")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     parser.add_argument("--tag", default="")
@@ -529,7 +572,12 @@ def main() -> int:
         vertex_counts=vertex_counts,
         group_features=group_features,
         num_subjects=10,
-        joint_train=True,
+        subject_mode=args.subject_mode,
+        atm_d_model=args.atm_d_model,
+        atm_heads=args.atm_heads,
+        atm_layers=args.atm_layers,
+        atm_dropout=args.atm_dropout,
+        atm_d_ff=args.atm_d_ff,
         use_spatial=args.mode == "spatial",
     ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
@@ -607,8 +655,18 @@ def main() -> int:
                 "train_images": int(len(train_image_index)),
                 "subjects": args.subjects,
                 "out_dir": str(out_dir),
+                "atm_d_model": args.atm_d_model,
+                "atm_heads": args.atm_heads,
+                "atm_layers": args.atm_layers,
+                "atm_dropout": args.atm_dropout,
+                "atm_d_ff": args.atm_d_ff,
+                "subject_mode": args.subject_mode,
                 "ordered_roi_supervision": True,
-                "atm_channel_token_slice": "enc_out[:, 1:64, :] when subject token is present",
+                "atm_channel_token_slice": (
+                    "enc_out[:, 1:64, :] when subject token is present"
+                    if args.subject_mode == "token"
+                    else "enc_out[:, :63, :] with no subject token"
+                ),
                 "roi_group_feature_shape": list(group_features.shape),
                 "rows": rows,
             },

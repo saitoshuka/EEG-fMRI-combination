@@ -9,6 +9,12 @@ EPOCHS="${EPOCHS:-20}"
 BATCH_SIZE="${BATCH_SIZE:-128}"
 EVAL_BATCH_SIZE="${EVAL_BATCH_SIZE:-64}"
 LR="${LR:-3e-4}"
+ATM_D_MODEL="${ATM_D_MODEL:-256}"
+ATM_HEADS="${ATM_HEADS:-4}"
+ATM_LAYERS="${ATM_LAYERS:-1}"
+ATM_DROPOUT="${ATM_DROPOUT:-0.25}"
+ATM_D_FF="${ATM_D_FF:-256}"
+SUBJECT_MODE="${SUBJECT_MODE:-none}"
 SUBJECTS="${SUBJECTS:-sub-01 sub-02 sub-03 sub-04 sub-05 sub-06 sub-07 sub-08 sub-09 sub-10}"
 DEVICE="${DEVICE:-cuda}"
 WAIT_FOR_EXTRACTION="${WAIT_FOR_EXTRACTION:-1}"
@@ -45,7 +51,7 @@ run_one() {
   local mode="$2"
   local roi_kind="$3"
   local train_roi="${ROI_DIR}/visual_roi_targets_${TAG}_n${budget}.npz"
-  local run_tag="atm_${mode}_${roi_kind}_${TAG}_n${budget}"
+  local run_tag="atm_${mode}_${roi_kind}_${TAG}_n${budget}_d${ATM_D_MODEL}_${SUBJECT_MODE}"
   local run_dir="${OUT_DIR}/${run_tag}"
   local run_log="${LOG_DIR}/${run_tag}.log"
 
@@ -64,6 +70,12 @@ run_one() {
     --batch-size "${BATCH_SIZE}" \
     --eval-batch-size "${EVAL_BATCH_SIZE}" \
     --lr "${LR}" \
+    --atm-d-model "${ATM_D_MODEL}" \
+    --atm-heads "${ATM_HEADS}" \
+    --atm-layers "${ATM_LAYERS}" \
+    --atm-dropout "${ATM_DROPOUT}" \
+    --atm-d-ff "${ATM_D_FF}" \
+    --subject-mode "${SUBJECT_MODE}" \
     --device "${DEVICE}" \
     --tag "${run_tag}" \
     2>&1 | tee -a "${run_log}"

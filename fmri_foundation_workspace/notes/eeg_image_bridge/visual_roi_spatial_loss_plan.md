@@ -245,6 +245,19 @@ large drop after fixed_slice -> original result likely benefited from subject-to
 small/no drop -> original result was not mainly driven by this bug
 ```
 
+For the clean follow-up run, prefer:
+
+```text
+atm_d_model = 256
+subject_mode = none
+```
+
+This removes the subject token and subject-specific value projection, and makes
+the ATM hidden size divisible by common attention/tensor-core friendly factors.
+Because these are architecture changes, compare semantic-only and spatial-ROI
+models under the same clean setting, then optionally rerun the original
+`d_model=250 + subject_token` setting only as an ablation.
+
 ### ROI Query Identity
 
 ROI queries should not be anonymous slots. They should be initialized or
