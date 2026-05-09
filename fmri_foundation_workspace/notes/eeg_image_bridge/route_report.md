@@ -310,6 +310,42 @@ as an auxiliary brain-space branch or head while keeping the strong ATM/CLIP
 retrieval embedding stable. Directly modifying the retrieval embedding with
 only 256 TRIBE-labeled train images tends to hurt retrieval.
 
+## TRIBE Reranking: Keep Retrieval Stable
+
+Script:
+
+```text
+fmri_foundation_workspace/scripts/rerank_atm_retrieval_with_tribe.py
+```
+
+Output note:
+
+```text
+fmri_foundation_workspace/notes/eeg_image_bridge/atm_tribe_rerank.md
+```
+
+This is the better response to the adapter result. The frozen ATM embedding
+retrieves CLIP image candidates first, then the EEG-predicted TRIBE latent only
+reranks the candidate set.
+
+Main test200 result:
+
+| method | top1 | top5 | top10 | rank pct | mean rank |
+|---|---:|---:|---:|---:|---:|
+| frozen ATM baseline | 0.5200 | 0.8550 | 0.9250 | 0.9854 | 3.9050 |
+| real TRIBE rerank, top10, weight 0.5 | 0.5950 | 0.8750 | 0.9250 | 0.9863 | 3.7250 |
+| shifted TRIBE rerank, top10, weight 0.5 | 0.4100 | 0.7900 | 0.9250 | 0.9826 | 4.4550 |
+| permutation-null mean, top10, weight 0.5 | 0.4219 | 0.8006 | 0.9250 | 0.9828 | 4.4220 |
+
+With a slightly stronger rerank (`top100`, weight `0.7`), top1 reaches `0.6000`
+and mean rank improves to `3.0850`, but this setting should be treated as a
+grid-search result until the rerank weight is chosen by a stronger validation
+protocol.
+
+This gives a cleaner story than direct adapter fine-tuning: TRIBE adds
+brain-space evidence during retrieval without damaging the already strong
+ATM/CLIP embedding.
+
 ## What This Means For The Story
 
 The stronger story is no longer:
