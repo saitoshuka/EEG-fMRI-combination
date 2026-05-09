@@ -139,17 +139,19 @@ Expanded target:
 
 ```text
 fmri_foundation_workspace/results/eeg_image_bridge/tribe_targets/tribe_targets_n64.npz
+fmri_foundation_workspace/results/eeg_image_bridge/tribe_targets/tribe_targets_n200.npz
 ```
 
-Target shape:
+Target shapes:
 
 ```text
-[64, 20484]
+n64:  [64, 20484]
+n200: [200, 20484]
 ```
 
-This is 64 THINGS test images by 20,484 fsaverage5 cortical vertices. Each
-image target is the mean over the two kept TRIBE time segments from the
-2-second still-video.
+The n200 target covers all 200 THINGS test images by 20,484 fsaverage5 cortical
+vertices. Each image target is the mean over the two kept TRIBE time segments
+from the 2-second still-video.
 
 ## EEG to TRIBE Head
 
@@ -162,15 +164,15 @@ fmri_foundation_workspace/scripts/repeat_atm_to_tribe_splits.py
 
 Evaluation design:
 
-- 64 images with TRIBE targets
+- initial 64-image smoke set, followed by all 200 THINGS test images
 - 10 subjects of ATM EEG embeddings
 - image-heldout split only
 - ridge projection head from 1024-d ATM embedding to 20484-d TRIBE surface
 - validation predictions averaged across subjects
 - shifted target null control
-- repeated over 20 random image splits
+- repeated over 20 random image splits for n64 and 30 random image splits for n200
 
-Repeated-split result:
+Repeated-split result on the initial 64-image smoke set:
 
 | model | rank pct | shifted rank pct | rank gap | diag-offdiag | shifted diag-offdiag | spatial r | shifted spatial r | spatial gap |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -184,6 +186,29 @@ This is not a final claim. The split has only 16 validation images per repeat,
 and the TRIBE target is model-generated rather than measured fMRI. But it is
 the first route here that gives a clean, repeatable, non-random signal with a
 brain-space target.
+
+Repeated-split result on all 200 THINGS test images:
+
+| model | rank pct | shifted rank pct | rank gap | diag-offdiag | shifted diag-offdiag | spatial r | shifted spatial r | spatial gap |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| ATM EEG mean subject | 0.9088 +/- 0.0152 | 0.4884 +/- 0.0461 | 0.4204 | 0.2432 | -0.0030 | 0.2692 | 0.0358 | 0.2335 |
+| CLIP image ceiling | 0.8073 +/- 0.0202 | 0.5030 +/- 0.0444 | 0.3043 | 0.1670 | 0.0048 | 0.1914 | 0.0317 | 0.1596 |
+
+This is stronger than the 64-image check because each repeat validates on 50
+held-out images instead of 16.
+
+Low-rank TRIBE latent result on all 200 THINGS test images:
+
+| model | latent rank pct | shifted latent rank pct | latent gap | reconstructed-surface rank pct | shifted surface rank pct | surface gap |
+|---|---:|---:|---:|---:|---:|---:|
+| ATM EEG mean subject | 0.9616 +/- 0.0093 | 0.4905 +/- 0.0401 | 0.4711 | 0.8203 +/- 0.0291 | 0.4915 +/- 0.0258 | 0.3288 |
+| CLIP image ceiling | 0.8491 +/- 0.0224 | 0.5094 +/- 0.0457 | 0.3397 | 0.7253 +/- 0.0255 | 0.4981 +/- 0.0270 | 0.2271 |
+
+For the low-rank setup, 32 PCA components fit on the training targets explain
+about 0.9982 of variance in each split. The surface spatial-r values are high
+for both real and shifted because the low-rank reconstruction captures a strong
+shared cortical template, so retrieval metrics and real-vs-shifted rank gaps
+are the cleaner readout here.
 
 ## What This Means For The Story
 
@@ -211,18 +236,17 @@ This fits the empirical pattern:
 
 ## Immediate Next Steps
 
-1. Extract TRIBE targets for all 200 THINGS test images.
-2. Extract a train subset first, for example 512 or 1,654 image-level targets,
+1. Extract a train subset first, for example 512 or 1,654 image-level targets,
    before attempting all 16,540 images.
-3. Replace full-surface regression with a low-rank target:
+2. Replace full-surface regression with a low-rank target:
    `TRIBE surface -> PCA/SVD latent -> EEG head`, while keeping an auxiliary
    surface reconstruction metric.
-4. Add the TRIBE head to the ATM training path:
+3. Add the TRIBE head to the ATM training path:
    `loss = CLIP contrastive + diffusion-prior-compatible loss + lambda *
    TRIBE latent loss`.
-5. Keep strict nulls:
+4. Keep strict nulls:
    shifted target, shuffled image labels, subject-heldout, and image-heldout.
-6. Only after this works, fine-tune the guided diffusion prior and compare image
+5. Only after this works, fine-tune the guided diffusion prior and compare image
    reconstruction quality and brain-space retrieval.
 
 ## Repro Commands
@@ -245,6 +269,11 @@ cd /home/sudaxin/projects/paired_data
 
 /home/sudaxin/miniconda3/envs/eeg/bin/python \
   fmri_foundation_workspace/scripts/repeat_atm_to_tribe_splits.py \
-  --targets fmri_foundation_workspace/results/eeg_image_bridge/tribe_targets/tribe_targets_n64.npz \
-  --alpha 100.0 --repeats 20
+  --targets fmri_foundation_workspace/results/eeg_image_bridge/tribe_targets/tribe_targets_n200.npz \
+  --alpha 100.0 --repeats 30
+
+/home/sudaxin/miniconda3/envs/eeg/bin/python \
+  fmri_foundation_workspace/scripts/repeat_atm_to_tribe_latent_splits.py \
+  --targets fmri_foundation_workspace/results/eeg_image_bridge/tribe_targets/tribe_targets_n200.npz \
+  --alpha 100.0 --components 32 --repeats 30
 ```
