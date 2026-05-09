@@ -110,6 +110,40 @@ This avoids mixing two different claims. Early visual ROIs should help spatial
 layout and lower-level visual structure; semantic/object ROIs should help
 high-level category/object identity in cortex.
 
+The ROI loss must be ordered and supervised, not permutation-invariant. The
+query index is the atlas identity:
+
+```text
+query 0 -> target ROI 0
+query 1 -> target ROI 1
+...
+query k -> target ROI k
+```
+
+For the current targets, the fixed order is the order stored in the target
+files:
+
+```text
+group_names  -> group_targets  # 12 ordered ROI groups
+parcel_names -> parcel_targets # 38 ordered parcels
+```
+
+Do not use Hungarian matching, set prediction, or any permutation-invariant
+loss for the ROI branch. Those losses would let queries exchange identities and
+would weaken the spatial claim. The spatial contrastive loss should also operate
+on the ordered ROI vector, not on an unordered set.
+
+Useful first loss implementation:
+
+```text
+L_roi =
+  mean_i [1 - corr(r_hat[i, :], r[i, :])]  # stimulus-level ordered ROI pattern
+  + beta * mean_k [1 - corr(r_hat[:, k], r[:, k])]  # ROI identity over batch
+```
+
+where `k` is a fixed atlas ROI index. Start with a small `beta`, for example
+`0.1`, because batch-level ROI correlation can be noisy at small batch sizes.
+
 ### C. Spatial Contrastive Loss
 
 Use InfoNCE over ROI vectors:
@@ -164,6 +198,36 @@ Do not overwrite z_sem with the spatial branch.
 
 Keep the strong retrieval embedding stable and use visual ROI predictions as
 an auxiliary branch or reranking signal.
+
+### ROI Query Identity
+
+ROI queries should not be anonymous slots. They should be initialized or
+conditioned with atlas metadata so each query starts with a spatial prior:
+
+```text
+q_i =
+  learned_roi_embedding_i
+  + group_embedding[group_i]
+  + hemisphere_embedding[hemi_i]
+  + coord_mlp(parcel_center_i)
+  + size_mlp(log_vertex_count_i)
+```
+
+Optional metadata once available:
+
+```text
+parcel_center_i: fsaverage/MNI-like surface centroid
+hemisphere_i: left/right
+group_i: early_calcarine, ventral_occipitotemporal, semantic_object_temporal, ...
+parcel_size_i: vertex count
+hierarchy_i: rough visual hierarchy index, e.g. early -> ventral/object -> temporal
+```
+
+The current `visual_roi_targets` files already store names and vertex counts.
+After the 4096 extraction finishes, add a small ROI metadata table or model
+loader helper that derives parcel/group ids and centroids from the same
+Destrieux fsaverage5 atlas. This should be done as a deterministic postprocess,
+not by changing chunk formats mid-extraction.
 
 ## Full TRIBE Target Runtime Estimate
 
