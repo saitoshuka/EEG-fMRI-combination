@@ -16,6 +16,7 @@ fmri_foundation_workspace/
     tribev2_paper/    # local paper files, gitignored
   notes/
     tribev2/          # reading notes moved from research_notes
+    eeg_image_bridge/ # EEG image reconstruction x TRIBE bridge notes
     tribe_neurostorm_integration_plan.md
   scripts/
     check_foundation_workspace.py
@@ -42,6 +43,12 @@ The first story to test is not "EEG predicts fMRI", but:
 
 > Can stimulus-conditioned TRIBE v2 predictions be placed into, compared
 > against, or diagnosed with an fMRI foundation-model latent space?
+
+The active bridge route is documented here:
+
+```text
+notes/eeg_image_bridge/route_report.md
+```
 
 ## Immediate Commands
 
