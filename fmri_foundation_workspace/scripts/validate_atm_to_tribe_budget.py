@@ -91,12 +91,14 @@ def visual_target_path(tribe_target_path: Path) -> Path:
 def add_row(
     rows: list[dict[str, object]],
     target_name: str,
+    target_type: str,
     model: str,
     train_count: int,
     metrics: dict[str, float],
 ) -> None:
     row: dict[str, object] = {
         "target": target_name,
+        "target_type": target_type,
         "model": model,
         "train_images": train_count,
     }
@@ -138,6 +140,55 @@ def main() -> int:
 
     rows: list[dict[str, object]] = []
 
+    clip_train_all = torch.load(
+        args.asset_root / "ViT-H-14_features_train.pt",
+        map_location="cpu",
+        weights_only=False,
+    )["img_features"].float()
+    clip_test_all = torch.load(
+        args.asset_root / "ViT-H-14_features_test.pt",
+        map_location="cpu",
+        weights_only=False,
+    )["img_features"].float()
+    clip_train = F.normalize(clip_train_all, dim=-1).numpy()[train_image_index]
+    clip_test = F.normalize(clip_test_all, dim=-1).numpy()[test_image_index]
+
+    # Primary readout: interpretable visual/semantic ROI targets.
+    train_visual = visual_target_path(args.train_targets)
+    test_visual = visual_target_path(args.test_targets)
+    if train_visual.exists() and test_visual.exists():
+        train_roi = np.load(train_visual, allow_pickle=True)
+        test_roi = np.load(test_visual, allow_pickle=True)
+        roi_specs = [
+            ("group_targets", "roi_group12"),
+            ("parcel_targets", "roi_parcel38"),
+        ]
+        for key, target_name in roi_specs:
+            roi_train = train_roi[key].astype(np.float32)
+            roi_test = test_roi[key].astype(np.float32)
+            pred_roi_rows = ridge_fit_predict(
+                x_train, repeat_targets(roi_train, n_subjects), x_test, args.alpha
+            )
+            pred_roi = mean_subject_test(pred_roi_rows, len(roi_test), n_subjects)
+            add_row(
+                rows,
+                target_name,
+                "primary_visual_roi",
+                "atm_eeg_to_target",
+                train_count,
+                retrieval_metrics(pred_roi, roi_test),
+            )
+            clip_pred_roi = ridge_fit_predict(clip_train, roi_train, clip_test, args.alpha)
+            add_row(
+                rows,
+                target_name,
+                "primary_visual_roi",
+                "clip_image_to_target_ceiling",
+                train_count,
+                retrieval_metrics(clip_pred_roi, roi_test),
+            )
+
+    # Auxiliary readout: low-rank full-surface latent sanity check.
     pca = PCA(
         n_components=min(args.components, train_count, y_train.shape[1]),
         svd_solver="randomized",
@@ -152,59 +203,21 @@ def main() -> int:
     add_row(
         rows,
         "tribe_pca32",
+        "auxiliary_full_surface_latent",
         "atm_eeg_to_target",
         train_count,
         retrieval_metrics(pred_z, test_z),
     )
 
-    clip_train_all = torch.load(
-        args.asset_root / "ViT-H-14_features_train.pt",
-        map_location="cpu",
-        weights_only=False,
-    )["img_features"].float()
-    clip_test_all = torch.load(
-        args.asset_root / "ViT-H-14_features_test.pt",
-        map_location="cpu",
-        weights_only=False,
-    )["img_features"].float()
-    clip_train = F.normalize(clip_train_all, dim=-1).numpy()[train_image_index]
-    clip_test = F.normalize(clip_test_all, dim=-1).numpy()[test_image_index]
     clip_pred_z = ridge_fit_predict(clip_train, train_z, clip_test, args.alpha)
     add_row(
         rows,
         "tribe_pca32",
+        "auxiliary_full_surface_latent",
         "clip_image_to_target_ceiling",
         train_count,
         retrieval_metrics(clip_pred_z, test_z),
     )
-
-    train_visual = visual_target_path(args.train_targets)
-    test_visual = visual_target_path(args.test_targets)
-    if train_visual.exists() and test_visual.exists():
-        train_roi = np.load(train_visual, allow_pickle=True)
-        test_roi = np.load(test_visual, allow_pickle=True)
-        for key in ["group_targets", "parcel_targets"]:
-            roi_train = train_roi[key].astype(np.float32)
-            roi_test = test_roi[key].astype(np.float32)
-            pred_roi_rows = ridge_fit_predict(
-                x_train, repeat_targets(roi_train, n_subjects), x_test, args.alpha
-            )
-            pred_roi = mean_subject_test(pred_roi_rows, len(roi_test), n_subjects)
-            add_row(
-                rows,
-                key,
-                "atm_eeg_to_target",
-                train_count,
-                retrieval_metrics(pred_roi, roi_test),
-            )
-            clip_pred_roi = ridge_fit_predict(clip_train, roi_train, clip_test, args.alpha)
-            add_row(
-                rows,
-                key,
-                "clip_image_to_target_ceiling",
-                train_count,
-                retrieval_metrics(clip_pred_roi, roi_test),
-            )
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
     tag = args.tag or f"n{train_count}"
@@ -231,13 +244,15 @@ def main() -> int:
         f"Train images: `{train_count}`",
         f"Subjects: `{len(subjects)}`",
         "",
-        "| target | model | rank pct | shifted | gap | top1 | top5 | diag-offdiag |",
-        "|---|---|---:|---:|---:|---:|---:|---:|",
+        "Primary readout is `roi_group12` and `roi_parcel38`. `tribe_pca32` is an auxiliary full-surface latent sanity check, not the main spatial target.",
+        "",
+        "| target | type | model | rank pct | shifted | gap | top1 | top5 | diag-offdiag |",
+        "|---|---|---|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
         gap = row["rank_percentile"] - row["shifted_rank_percentile"]
         lines.append(
-            f"| {row['target']} | {row['model']} | "
+            f"| {row['target']} | {row['target_type']} | {row['model']} | "
             f"{row['rank_percentile']:.4f} | {row['shifted_rank_percentile']:.4f} | "
             f"{gap:.4f} | {row['top1']:.4f} | {row['top5']:.4f} | "
             f"{row['diag_minus_offdiag']:.4f} |"
