@@ -111,11 +111,13 @@ class LowRankContextModel(nn.Module):
         subject_bias: bool,
         n_datasets: int,
         dataset_embed: bool,
+        linear_skip: bool,
     ) -> None:
         super().__init__()
         self.input = nn.Sequential(nn.LayerNorm(x_dim), nn.Linear(x_dim, hidden_dim))
         self.pos = nn.Parameter(torch.zeros(1, context_steps, hidden_dim))
         self.dataset_embed = nn.Embedding(n_datasets, hidden_dim) if dataset_embed else None
+        self.linear_skip = nn.Sequential(nn.LayerNorm(x_dim * 2), nn.Linear(x_dim * 2, y_dim)) if linear_skip else None
         layer = nn.TransformerEncoderLayer(
             d_model=hidden_dim,
             nhead=heads,
@@ -156,6 +158,9 @@ class LowRankContextModel(nn.Module):
         pred = self.decoder(latent)
         if self.subject_bias is not None:
             pred = pred + self.subject_bias(subject_id)
+        if self.linear_skip is not None:
+            skip = torch.cat([x[:, -1], x.mean(dim=1)], dim=1)
+            pred = pred + self.linear_skip(skip)
         return pred, latent
 
 
@@ -315,6 +320,27 @@ def contrastive_loss(pred: torch.Tensor, target: torch.Tensor, temperature: floa
     return 0.5 * (F.cross_entropy(logits, labels) + F.cross_entropy(logits.T, labels))
 
 
+def grouped_contrastive_loss(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    group: torch.Tensor,
+    temperature: float,
+) -> torch.Tensor:
+    losses = []
+    weights = []
+    for gid in torch.unique(group):
+        idx = torch.nonzero(group == gid, as_tuple=True)[0]
+        if idx.numel() < 2:
+            continue
+        losses.append(contrastive_loss(pred[idx], target[idx], temperature))
+        weights.append(float(idx.numel()))
+    if not losses:
+        return pred.new_zeros(())
+    weight_t = pred.new_tensor(weights)
+    weight_t = weight_t / weight_t.sum()
+    return torch.stack(losses).mul(weight_t).sum()
+
+
 def corr_loss(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     pred_c = pred - pred.mean(0, keepdim=True)
     target_c = target - target.mean(0, keepdim=True)
@@ -424,6 +450,42 @@ def add_metrics(
     )
 
 
+def add_metrics_with_optional_dataset_breakdown(
+    args: argparse.Namespace,
+    rows: list[MetricRow],
+    fold: int,
+    method: str,
+    target_mode: str,
+    n_train: int,
+    pred: np.ndarray,
+    true: np.ndarray,
+    run: np.ndarray,
+    target_global_idx: np.ndarray,
+    context_steps: int,
+    dataset: np.ndarray,
+) -> None:
+    add_metrics(rows, fold, method, target_mode, n_train, pred, true, run, target_global_idx, context_steps)
+    if not args.dataset_metrics:
+        return
+    ds_test = dataset[target_global_idx].astype(str)
+    for ds_name in sorted(set(ds_test.tolist())):
+        local = np.flatnonzero(ds_test == ds_name)
+        if local.size < 10:
+            continue
+        add_metrics(
+            rows,
+            fold,
+            method,
+            f"{target_mode}:dataset={ds_name}",
+            n_train,
+            pred[local],
+            true[local],
+            run,
+            target_global_idx[local],
+            context_steps,
+        )
+
+
 def fit_target_space(y: np.ndarray, train_target_idx: np.ndarray, pca_dim: int, seed: int) -> tuple[np.ndarray, str, float]:
     scaler = StandardScaler()
     y_train = scaler.fit_transform(y[train_target_idx])
@@ -477,6 +539,7 @@ def train_neural(
         subject_bias=not args.no_subject_bias,
         n_datasets=n_datasets,
         dataset_embed=args.dataset_embed,
+        linear_skip=args.linear_skip,
     ).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     total_steps = max(1, args.epochs * max(1, len(train_loader)))
@@ -501,7 +564,11 @@ def train_neural(
                 if args.corr_weight > 0:
                     loss = loss + args.corr_weight * corr_loss(pred, yb)
                 if args.contrastive_weight > 0:
-                    loss = loss + args.contrastive_weight * contrastive_loss(pred, yb, args.temperature)
+                    if args.contrastive_scope == "dataset":
+                        c_loss = grouped_contrastive_loss(pred, yb, db, args.temperature)
+                    else:
+                        c_loss = contrastive_loss(pred, yb, args.temperature)
+                    loss = loss + args.contrastive_weight * c_loss
             scaler.scale(loss).backward()
             if args.grad_clip > 0:
                 scaler.unscale_(opt)
@@ -565,6 +632,28 @@ def fit_time_prediction_all(
     ridge = RidgeCV(alphas=np.logspace(-2, 4, 10))
     ridge.fit(train_x, y_space[train_target])
     return ridge.predict(all_x).astype(np.float32)
+
+
+def fit_time_prediction_all_grouped(
+    time_frac: np.ndarray,
+    y_space: np.ndarray,
+    train_target: np.ndarray,
+    groups: np.ndarray,
+    harmonics: int,
+) -> np.ndarray:
+    out = np.zeros_like(y_space, dtype=np.float32)
+    train_mask_all = np.zeros(y_space.shape[0], dtype=bool)
+    train_mask_all[train_target] = True
+    group_str = groups.astype(str)
+    global_pred = fit_time_prediction_all(time_frac, y_space, train_target, harmonics)
+    for group_name in np.unique(group_str):
+        idx = np.flatnonzero(group_str == group_name)
+        train_idx = idx[train_mask_all[idx]]
+        if train_idx.size < max(8, y_space.shape[1] + 1):
+            out[idx] = global_pred[idx]
+            continue
+        out[idx] = fit_time_prediction_all(time_frac[idx], y_space[idx], np.searchsorted(idx, train_idx), harmonics)
+    return out
 
 
 def write_outputs(args: argparse.Namespace, rows: list[MetricRow], meta: dict[str, object]) -> None:
@@ -665,6 +754,9 @@ def run(args: argparse.Namespace) -> None:
         time_frac = time_frac[keep]
         dataset = dataset[keep]
 
+    if args.x_run_zscore:
+        x = zscore_detrend_by_run(x, run_id, degree=args.x_detrend_degree)
+
     y = zscore_detrend_by_run(y_raw, run_id, degree=args.detrend_degree)
     seq_idx, target_idx = build_sequence_index(
         run_id,
@@ -707,7 +799,12 @@ def run(args: argparse.Namespace) -> None:
         y_space, target_space, y_var = fit_target_space(y, train_target, args.target_pca_dim, args.seed + fold)
         target_label = "time_residual" if args.target_residualize_time else "real"
         if args.target_residualize_time:
-            time_all = fit_time_prediction_all(time_frac, y_space, train_target, args.time_harmonics)
+            if args.time_residual_group == "dataset":
+                time_all = fit_time_prediction_all_grouped(time_frac, y_space, train_target, dataset, args.time_harmonics)
+            elif args.time_residual_group == "run":
+                time_all = fit_time_prediction_all_grouped(time_frac, y_space, train_target, run_id, args.time_harmonics)
+            else:
+                time_all = fit_time_prediction_all(time_frac, y_space, train_target, args.time_harmonics)
             y_eval_space = (y_space - time_all).astype(np.float32)
         else:
             y_eval_space = y_space
@@ -725,11 +822,16 @@ def run(args: argparse.Namespace) -> None:
                 "n_subjects": int(len(subjects)),
                 "n_datasets": int(len(datasets)),
                 "dataset_embed": bool(args.dataset_embed),
+                "linear_skip": bool(args.linear_skip),
+                "contrastive_scope": args.contrastive_scope,
                 "x_dim": int(x.shape[1]),
+                "x_run_zscore": bool(args.x_run_zscore),
+                "x_detrend_degree": int(args.x_detrend_degree),
                 "y_raw_dim": int(y_raw.shape[1]),
                 "target_space": target_space,
                 "target_variance_retained": float(y_var),
                 "target_residualize_time": bool(args.target_residualize_time),
+                "time_residual_group": args.time_residual_group,
             }
 
         print(
@@ -740,24 +842,76 @@ def run(args: argparse.Namespace) -> None:
 
         true = y_eval_space[test_target]
         mean_pred = np.zeros_like(true)
-        add_metrics(rows, fold, "train_mean", target_label, train_seq.size, mean_pred, true, run_id, test_target, args.context_steps)
+        add_metrics_with_optional_dataset_breakdown(
+            args,
+            rows,
+            fold,
+            "train_mean",
+            target_label,
+            train_seq.size,
+            mean_pred,
+            true,
+            run_id,
+            test_target,
+            args.context_steps,
+            dataset,
+        )
 
         tb = time_basis(time_frac, args.time_harmonics)
         tb_scaler = StandardScaler()
         tb_train = tb_scaler.fit_transform(tb[train_target])
         tb_test = tb_scaler.transform(tb[test_target])
         time_pred = fit_ridge_baselines(tb_train, y_eval_space[train_target], tb_test)
-        add_metrics(rows, fold, "time_ridge", target_label, train_seq.size, time_pred, true, run_id, test_target, args.context_steps)
+        add_metrics_with_optional_dataset_breakdown(
+            args,
+            rows,
+            fold,
+            "time_ridge",
+            target_label,
+            train_seq.size,
+            time_pred,
+            true,
+            run_id,
+            test_target,
+            args.context_steps,
+            dataset,
+        )
 
         last_train = x_scaled[seq_idx[train_seq, -1]]
         last_test = x_scaled[seq_idx[test_seq, -1]]
         last_pred = fit_ridge_baselines(last_train, y_eval_space[train_target], last_test)
-        add_metrics(rows, fold, "ridge_last", target_label, train_seq.size, last_pred, true, run_id, test_target, args.context_steps)
+        add_metrics_with_optional_dataset_breakdown(
+            args,
+            rows,
+            fold,
+            "ridge_last",
+            target_label,
+            train_seq.size,
+            last_pred,
+            true,
+            run_id,
+            test_target,
+            args.context_steps,
+            dataset,
+        )
 
         mean_train = x_scaled[seq_idx[train_seq]].mean(axis=1)
         mean_test = x_scaled[seq_idx[test_seq]].mean(axis=1)
         mean_ctx_pred = fit_ridge_baselines(mean_train, y_eval_space[train_target], mean_test)
-        add_metrics(rows, fold, "ridge_context_mean", target_label, train_seq.size, mean_ctx_pred, true, run_id, test_target, args.context_steps)
+        add_metrics_with_optional_dataset_breakdown(
+            args,
+            rows,
+            fold,
+            "ridge_context_mean",
+            target_label,
+            train_seq.size,
+            mean_ctx_pred,
+            true,
+            run_id,
+            test_target,
+            args.context_steps,
+            dataset,
+        )
 
         for mode, train_y in [(target_label, y_eval_space), (f"{target_label}_shifted_null", y_train_shifted)]:
             pred = train_neural(
@@ -774,7 +928,20 @@ def run(args: argparse.Namespace) -> None:
                 dataset_ids=dataset_ids,
                 n_datasets=len(datasets),
             )
-            add_metrics(rows, fold, "longctx_lowrank_transformer", mode, train_seq.size, pred, true, run_id, test_target, args.context_steps)
+            add_metrics_with_optional_dataset_breakdown(
+                args,
+                rows,
+                fold,
+                "longctx_lowrank_transformer",
+                mode,
+                train_seq.size,
+                pred,
+                true,
+                run_id,
+                test_target,
+                args.context_steps,
+                dataset,
+            )
 
     if meta is None:
         raise RuntimeError("No folds were evaluated")
@@ -793,10 +960,14 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--context-steps", type=int, default=32)
     p.add_argument("--context-stride", type=int, default=1)
     p.add_argument("--max-step-gap", type=int, default=2)
+    p.add_argument("--x-run-zscore", action="store_true")
+    p.add_argument("--x-detrend-degree", type=int, default=0)
     p.add_argument("--detrend-degree", type=int, default=1)
     p.add_argument("--target-residualize-time", action="store_true")
+    p.add_argument("--time-residual-group", choices=["global", "dataset", "run"], default="global")
     p.add_argument("--target-pca-dim", type=int, default=32, help="0 disables target PCA.")
     p.add_argument("--split-mode", choices=["within_run_block", "subject"], default="within_run_block")
+    p.add_argument("--dataset-metrics", action="store_true")
     p.add_argument("--folds", type=int, default=3)
     p.add_argument("--max-folds", type=int, default=1)
     p.add_argument("--test-frac", type=float, default=0.25)
@@ -810,6 +981,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--dropout", type=float, default=0.1)
     p.add_argument("--no-subject-bias", action="store_true")
     p.add_argument("--dataset-embed", action="store_true")
+    p.add_argument("--linear-skip", action="store_true")
     p.add_argument("--epochs", type=int, default=16)
     p.add_argument("--patience", type=int, default=4)
     p.add_argument("--batch-size", type=int, default=192)
@@ -819,6 +991,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--grad-clip", type=float, default=1.0)
     p.add_argument("--corr-weight", type=float, default=0.05)
     p.add_argument("--contrastive-weight", type=float, default=0.03)
+    p.add_argument("--contrastive-scope", choices=["batch", "dataset"], default="batch")
     p.add_argument("--temperature", type=float, default=0.1)
     return p.parse_args()
 
