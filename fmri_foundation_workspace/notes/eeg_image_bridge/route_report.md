@@ -389,7 +389,7 @@ token-level spatial branch from scratch. The practical next step is to scale
 TRIBE target extraction first, then retry this branch with many more train
 images and ideally true anatomical visual ROI targets.
 
-## Semantic-Only Size Baseline
+## Semantic-Only Frozen-Feature Probe
 
 Script:
 
@@ -403,9 +403,9 @@ Output note:
 fmri_foundation_workspace/notes/eeg_image_bridge/semantic_only_size_baseline.md
 ```
 
-This fills the missing ablation: before claiming that a `1654`-image visual or
-semantic ROI branch improves the model, it must beat a size-matched
-semantic-only head trained with the same image budget.
+This is not the final fair architecture baseline. It is a frozen-feature probe:
+it uses an already trained ATM representation and only trains small semantic
+heads outside the original ATM training path.
 
 Key test200 rows:
 
@@ -422,19 +422,25 @@ frozen ATM embedding. This does not make `frozen ATM direct` a fair
 trained on the larger THINGS-EEG training set. It should be treated as a
 full-data pretrained reference or deployment anchor.
 
-Therefore a future ROI or semantic-ROI branch should be judged in two separate
-ways:
+The correct fair experiment is architecture-level, not head-only:
 
-- fair budget-matched ablation: same frozen backbone, same train-image subset,
-  same number of extra targets, semantic-only head/blend versus
-  semantic-plus-spatial head/blend;
-- practical deployment check: whether adding the spatial branch preserves or
-  improves the stronger frozen ATM direct retrieval behavior.
+```text
+baseline:
+  EEG -> ATM backbone -> semantic branch -> CLIP image embedding
 
-Only the first comparison answers whether ROI/TRIBE spatial supervision is
-better than semantic-only under the same new supervision budget. The second
-comparison answers whether the added spatial branch is actually useful on top of
-the already strong pretrained EEG image model.
+spatial model:
+  EEG -> ATM backbone -> semantic branch -> CLIP image embedding
+                       -> ROI-query spatial branch -> TRIBE/visual ROI targets
+                       -> fusion for retrieval / generation
+```
+
+Both models must use the same image subset, same EEG trials, same initialization
+policy, same training steps, same augmentations, and same test200 evaluation.
+If starting from a pretrained ATM checkpoint, both arms must start from the same
+checkpoint and receive the same fine-tuning budget. If training from scratch,
+both arms must be trained from scratch on the same subset. The full-data frozen
+ATM number can be shown only as a reference ceiling or deployment anchor, not as
+the baseline for the `1654`-image claim.
 
 ## Visual And Semantic ROI Targets
 

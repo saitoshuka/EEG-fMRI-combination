@@ -219,8 +219,13 @@ Better staged plan:
 
 1. Extract `1024` or `1654` TRIBE train targets in chunks.
 2. Convert each chunk to visual ROI targets.
-3. Train semantic-preserving ROI branch with the loss above.
-4. Evaluate:
+3. Train the original ATM architecture on the same image subset as the
+   semantic-only baseline:
+   `EEG -> ATM backbone -> semantic branch -> CLIP image embedding`.
+4. Train the matched spatial model with the same ATM backbone, same data budget,
+   same initialization policy, and same training steps:
+   `semantic branch + ROI-query TRIBE/visual ROI branch + fusion`.
+5. Evaluate:
    - CLIP retrieval must not drop;
    - TRIBE visual ROI retrieval must beat shifted/ROI-shuffle nulls;
    - TRIBE reranking should improve test200;
