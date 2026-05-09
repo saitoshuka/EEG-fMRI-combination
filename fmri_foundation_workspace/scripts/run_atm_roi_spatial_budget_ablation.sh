@@ -24,7 +24,8 @@ wait_for_extraction() {
   if [[ "${WAIT_FOR_EXTRACTION}" != "1" ]]; then
     return 0
   fi
-  while pgrep -f "extract_tribe_targets_fast_still.py.*${TAG}" >/dev/null; do
+  while pgrep -f "extract_tribe_targets_fast_still.py.*${TAG}" >/dev/null \
+    || pgrep -f "run_tribe_sample_target_chunks.sh" >/dev/null; do
     echo "[$(date '+%F %T')] waiting for TRIBE fast-still extraction (${TAG}) to free GPU..."
     sleep 60
   done
