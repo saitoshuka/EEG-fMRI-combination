@@ -199,6 +199,52 @@ Do not overwrite z_sem with the spatial branch.
 Keep the strong retrieval embedding stable and use visual ROI predictions as
 an auxiliary branch or reranking signal.
 
+### ATM Subject Token Shortcut Check
+
+Mark this as a required ablation if the ROI-spatial branch gives a surprising
+gain or if the semantic baseline looks weaker than expected.
+
+The original ATM code appends a subject token before the 63 EEG channel tokens
+when `joint_train=True`:
+
+```text
+index 0    -> subject token
+index 1-63 -> EEG channel tokens
+```
+
+The original output slice used:
+
+```text
+enc_out[:, :63, :]
+```
+
+That slice includes the subject token and drops the last EEG channel. This is
+not test-label leakage, but it can act as a subject shortcut in same-subject
+train/test evaluation and can contaminate any branch that assumes the second
+dimension is purely EEG channels.
+
+The current ROI-spatial training script uses:
+
+```text
+enc_out[:, 1:64, :]
+```
+
+when a subject token is present, so the ROI queries attend to exactly 63 EEG
+channel tokens. If performance changes a lot, rerun the original ATM test with
+both slicing modes:
+
+```text
+original_slice: enc_out[:, :63, :]
+fixed_slice:    enc_out[:, 1:64, :]
+```
+
+Expected interpretation:
+
+```text
+large drop after fixed_slice -> original result likely benefited from subject-token shortcut or channel-drop artifact
+small/no drop -> original result was not mainly driven by this bug
+```
+
 ### ROI Query Identity
 
 ROI queries should not be anonymous slots. They should be initialized or
