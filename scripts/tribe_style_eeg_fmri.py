@@ -552,6 +552,21 @@ def fit_ridge_baselines(
     return ridge.predict(test_x).astype(np.float32)
 
 
+def fit_time_prediction_all(
+    time_frac: np.ndarray,
+    y_space: np.ndarray,
+    train_target: np.ndarray,
+    harmonics: int,
+) -> np.ndarray:
+    tb = time_basis(time_frac, harmonics)
+    scaler = StandardScaler()
+    train_x = scaler.fit_transform(tb[train_target])
+    all_x = scaler.transform(tb)
+    ridge = RidgeCV(alphas=np.logspace(-2, 4, 10))
+    ridge.fit(train_x, y_space[train_target])
+    return ridge.predict(all_x).astype(np.float32)
+
+
 def write_outputs(args: argparse.Namespace, rows: list[MetricRow], meta: dict[str, object]) -> None:
     args.results_dir.mkdir(parents=True, exist_ok=True)
     with (args.results_dir / "metrics.csv").open("w", newline="", encoding="utf-8") as handle:
@@ -690,11 +705,17 @@ def run(args: argparse.Namespace) -> None:
         train_target = target_idx[train_seq]
         test_target = target_idx[test_seq]
         y_space, target_space, y_var = fit_target_space(y, train_target, args.target_pca_dim, args.seed + fold)
+        target_label = "time_residual" if args.target_residualize_time else "real"
+        if args.target_residualize_time:
+            time_all = fit_time_prediction_all(time_frac, y_space, train_target, args.time_harmonics)
+            y_eval_space = (y_space - time_all).astype(np.float32)
+        else:
+            y_eval_space = y_space
         train_context = unique_context_indices(seq_idx, train_seq)
         x_scaler = StandardScaler()
         x_scaler.fit(x[train_context])
         x_scaled = x_scaler.transform(x).astype(np.float32)
-        y_train_shifted = session_shift(y_space, run_id, args.seed + fold * 104729)
+        y_train_shifted = session_shift(y_eval_space, run_id, args.seed + fold * 104729)
 
         if meta is None:
             meta = {
@@ -708,6 +729,7 @@ def run(args: argparse.Namespace) -> None:
                 "y_raw_dim": int(y_raw.shape[1]),
                 "target_space": target_space,
                 "target_variance_retained": float(y_var),
+                "target_residualize_time": bool(args.target_residualize_time),
             }
 
         print(
@@ -716,32 +738,32 @@ def run(args: argparse.Namespace) -> None:
             flush=True,
         )
 
-        true = y_space[test_target]
+        true = y_eval_space[test_target]
         mean_pred = np.zeros_like(true)
-        add_metrics(rows, fold, "train_mean", "real", train_seq.size, mean_pred, true, run_id, test_target, args.context_steps)
+        add_metrics(rows, fold, "train_mean", target_label, train_seq.size, mean_pred, true, run_id, test_target, args.context_steps)
 
         tb = time_basis(time_frac, args.time_harmonics)
         tb_scaler = StandardScaler()
         tb_train = tb_scaler.fit_transform(tb[train_target])
         tb_test = tb_scaler.transform(tb[test_target])
-        time_pred = fit_ridge_baselines(tb_train, y_space[train_target], tb_test)
-        add_metrics(rows, fold, "time_ridge", "real", train_seq.size, time_pred, true, run_id, test_target, args.context_steps)
+        time_pred = fit_ridge_baselines(tb_train, y_eval_space[train_target], tb_test)
+        add_metrics(rows, fold, "time_ridge", target_label, train_seq.size, time_pred, true, run_id, test_target, args.context_steps)
 
         last_train = x_scaled[seq_idx[train_seq, -1]]
         last_test = x_scaled[seq_idx[test_seq, -1]]
-        last_pred = fit_ridge_baselines(last_train, y_space[train_target], last_test)
-        add_metrics(rows, fold, "ridge_last", "real", train_seq.size, last_pred, true, run_id, test_target, args.context_steps)
+        last_pred = fit_ridge_baselines(last_train, y_eval_space[train_target], last_test)
+        add_metrics(rows, fold, "ridge_last", target_label, train_seq.size, last_pred, true, run_id, test_target, args.context_steps)
 
         mean_train = x_scaled[seq_idx[train_seq]].mean(axis=1)
         mean_test = x_scaled[seq_idx[test_seq]].mean(axis=1)
-        mean_ctx_pred = fit_ridge_baselines(mean_train, y_space[train_target], mean_test)
-        add_metrics(rows, fold, "ridge_context_mean", "real", train_seq.size, mean_ctx_pred, true, run_id, test_target, args.context_steps)
+        mean_ctx_pred = fit_ridge_baselines(mean_train, y_eval_space[train_target], mean_test)
+        add_metrics(rows, fold, "ridge_context_mean", target_label, train_seq.size, mean_ctx_pred, true, run_id, test_target, args.context_steps)
 
-        for mode, train_y in [("real", y_space), ("shifted_null", y_train_shifted)]:
+        for mode, train_y in [(target_label, y_eval_space), (f"{target_label}_shifted_null", y_train_shifted)]:
             pred = train_neural(
                 args,
                 x_scaled=x_scaled,
-                y_space=y_space,
+                y_space=y_eval_space,
                 y_train_space=train_y,
                 seq_idx=seq_idx,
                 target_idx=target_idx,
@@ -772,6 +794,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--context-stride", type=int, default=1)
     p.add_argument("--max-step-gap", type=int, default=2)
     p.add_argument("--detrend-degree", type=int, default=1)
+    p.add_argument("--target-residualize-time", action="store_true")
     p.add_argument("--target-pca-dim", type=int, default=32, help="0 disables target PCA.")
     p.add_argument("--split-mode", choices=["within_run_block", "subject"], default="within_run_block")
     p.add_argument("--folds", type=int, default=3)

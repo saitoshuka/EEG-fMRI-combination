@@ -237,6 +237,12 @@ def scalar(z: np.lib.npyio.NpzFile, key: str, default: str = "") -> str:
     return str(arr.item()) if arr.shape == () else str(arr)
 
 
+def select_good_windows(arr: np.ndarray, good: np.ndarray) -> np.ndarray:
+    """Apply a raw-window validity mask after clipping to the shared timeline."""
+    n = min(arr.shape[0], good.shape[0])
+    return arr[:n][good[:n]]
+
+
 def build_features(args: argparse.Namespace) -> dict[str, dict[str, object]]:
     args.feature_dir.mkdir(parents=True, exist_ok=True)
     all_meta = {}
@@ -245,7 +251,7 @@ def build_features(args: argparse.Namespace) -> dict[str, dict[str, object]]:
         if args.max_runs > 0:
             files = files[: args.max_runs]
         x_sum, x_spat = [], []
-        z_targets, z_masks = [], []
+        z_targets, z_masks, z_neurostorm_targets = [], [], []
         subjects, runs, sample_ids, time_frac, sample_time = [], [], [], [], []
         qc_rows: list[QcRow] = []
         manifests = []
@@ -275,21 +281,32 @@ def build_features(args: argparse.Namespace) -> dict[str, dict[str, object]]:
                     args.batch_size,
                     args.max_montage_channels,
                 )
-                n = min(sum_feat.shape[0], starts.size, tf_all.size, st_all.size)
+                tf_sel = select_good_windows(tf_all, good)
+                st_sel = select_good_windows(st_all, good)
+                y_sel = select_good_windows(z["Y"].astype(np.float32), good) if "Y" in z.files else None
+                y_mask_sel = select_good_windows(z["Y_mask"].astype(np.float32), good) if "Y_mask" in z.files else None
+                zns_sel = select_good_windows(z["Z_neurostorm"].astype(np.float32), good) if "Z_neurostorm" in z.files else None
+                n_candidates = [sum_feat.shape[0], spat_feat.shape[0], tf_sel.shape[0], st_sel.shape[0]]
+                if y_sel is not None:
+                    n_candidates.append(y_sel.shape[0])
+                if y_mask_sel is not None:
+                    n_candidates.append(y_mask_sel.shape[0])
+                if zns_sel is not None:
+                    n_candidates.append(zns_sel.shape[0])
+                n = min(n_candidates)
                 sum_feat = sum_feat[:n]
                 spat_feat = spat_feat[:n]
                 x_sum.append(sum_feat)
                 x_spat.append(spat_feat)
                 if "Y" in z.files:
-                    y = z["Y"].astype(np.float32)
-                    y = y[good[: y.shape[0]]][:n]
-                    z_targets.append(y)
+                    z_targets.append(y_sel[:n])
                 if "Y_mask" in z.files:
-                    y_mask = z["Y_mask"].astype(np.float32)
-                    y_mask = y_mask[good[: y_mask.shape[0]]][:n]
-                    z_masks.append(y_mask)
-                tf_sel = tf_all[good[: tf_all.shape[0]]][:n]
-                st_sel = st_all[good[: st_all.shape[0]]][:n]
+                    z_masks.append(y_mask_sel[:n])
+                if "Z_neurostorm" in z.files:
+                    zns = zns_sel[:n]
+                    z_neurostorm_targets.append(zns.reshape(zns.shape[0], -1))
+                tf_sel = tf_sel[:n]
+                st_sel = st_sel[:n]
                 subjects.extend([subject] * n)
                 runs.extend([run] * n)
                 sample_ids.extend(range(n))
@@ -331,6 +348,8 @@ def build_features(args: argparse.Namespace) -> dict[str, dict[str, object]]:
             target_payload["Z"] = np.concatenate(z_targets, axis=0).astype(np.float32)
         if z_masks:
             target_payload["Z_mask"] = np.concatenate(z_masks, axis=0).astype(np.float32)
+        if z_neurostorm_targets:
+            target_payload["Z_neurostorm"] = np.concatenate(z_neurostorm_targets, axis=0).astype(np.float32)
         np.savez_compressed(
             out_summary,
             X=np.concatenate(x_sum, axis=0).astype(np.float32),
@@ -615,6 +634,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--feature-dir", type=Path, default=REPO_ROOT / "data/eeg_raw_bandpower_controls_v1")
     p.add_argument("--results-dir", type=Path, default=DEFAULT_RESULTS)
     p.add_argument("--force-extract", action="store_true")
+    p.add_argument("--extract-only", action="store_true")
     p.add_argument("--max-runs", type=int, default=0)
     p.add_argument("--window-sec", type=float, default=8.0)
     p.add_argument("--batch-size", type=int, default=64)
@@ -648,6 +668,14 @@ def main() -> None:
     meta: dict[str, object] = {}
     if need_extract:
         meta["extraction"] = build_features(args)
+    if args.extract_only:
+        args.results_dir.mkdir(parents=True, exist_ok=True)
+        (args.results_dir / "summary.json").write_text(
+            json.dumps({"meta": meta, "feature_dir": str(args.feature_dir), "extract_only": True}, indent=2),
+            encoding="utf-8",
+        )
+        print(json.dumps({"feature_dir": str(args.feature_dir), "extract_only": True}, indent=2))
+        return
     rows: list[ControlRow] = []
     meta["features"] = {}
     for name, _ in sources:
