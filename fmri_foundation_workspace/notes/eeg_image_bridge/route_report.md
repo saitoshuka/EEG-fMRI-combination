@@ -389,6 +389,44 @@ token-level spatial branch from scratch. The practical next step is to scale
 TRIBE target extraction first, then retry this branch with many more train
 images and ideally true anatomical visual ROI targets.
 
+## Semantic-Only Size Baseline
+
+Script:
+
+```text
+fmri_foundation_workspace/scripts/train_semantic_only_size_baseline.py
+```
+
+Output note:
+
+```text
+fmri_foundation_workspace/notes/eeg_image_bridge/semantic_only_size_baseline.md
+```
+
+This fills the missing ablation: before claiming that a `1654`-image visual or
+semantic ROI branch improves the model, it must beat a size-matched
+semantic-only head trained with the same image budget.
+
+Key test200 rows:
+
+| model | train images | top1 | top5 | rank pct | diag-offdiag |
+|---|---:|---:|---:|---:|---:|
+| frozen ATM direct | no new training | 0.5200 | 0.8550 | 0.9854 | 0.1741 |
+| semantic ridge CLIP head | 1654 | 0.2550 | 0.6400 | 0.9585 | 0.2562 |
+| semantic residual blend | 1654 | 0.4400 | 0.8000 | 0.9813 | 0.2140 |
+
+The trained semantic-only head improves similarity calibration
+(`diag-offdiag`) but still hurts retrieval ranking relative to the original
+frozen ATM embedding. Therefore a future ROI or semantic-ROI branch should be
+judged against two baselines:
+
+- same-budget semantic-only head/blend;
+- the stronger frozen ATM direct baseline.
+
+Only beating the same-budget head is a weak positive. Beating or preserving the
+frozen ATM retrieval baseline while improving brain-space metrics would be the
+stronger claim.
+
 ## Visual And Semantic ROI Targets
 
 Scripts:
