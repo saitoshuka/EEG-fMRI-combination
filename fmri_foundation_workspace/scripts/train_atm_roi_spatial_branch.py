@@ -120,6 +120,8 @@ class iTransformer(nn.Module):
     def forward(self, x_enc: Tensor, x_mark_enc=None, subject_ids: Tensor | None = None) -> Tensor:
         enc_out = self.enc_embedding(x_enc, x_mark_enc, subject_ids)
         enc_out, _ = self.encoder(enc_out, attn_mask=None)
+        if subject_ids is not None and self.enc_embedding.subject_embedding is not None:
+            return enc_out[:, 1:64, :]
         return enc_out[:, :63, :]
 
 
@@ -606,6 +608,7 @@ def main() -> int:
                 "subjects": args.subjects,
                 "out_dir": str(out_dir),
                 "ordered_roi_supervision": True,
+                "atm_channel_token_slice": "enc_out[:, 1:64, :] when subject token is present",
                 "roi_group_feature_shape": list(group_features.shape),
                 "rows": rows,
             },
