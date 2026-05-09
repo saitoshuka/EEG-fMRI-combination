@@ -346,6 +346,49 @@ This gives a cleaner story than direct adapter fine-tuning: TRIBE adds
 brain-space evidence during retrieval without damaging the already strong
 ATM/CLIP embedding.
 
+## ROI-Query Spatial Branch Check
+
+Scripts:
+
+```text
+fmri_foundation_workspace/scripts/build_thing_eeg_token_cache.py
+fmri_foundation_workspace/scripts/train_roi_query_tribe_branch.py
+```
+
+Output note:
+
+```text
+fmri_foundation_workspace/notes/eeg_image_bridge/roi_query_tribe_branch.md
+```
+
+This tested the proposed ROI-query structure at token level. Because an
+anatomical visual ROI atlas was not wired in yet, the first version used `32`
+data-driven TRIBE cortical PCA component queries. A compact raw EEG cache was
+built from the THINGS preprocessed EEG:
+
+```text
+train EEG: [10 subjects, 256 images, 4 repeats, 63 channels, 250 timepoints]
+test EEG:  [10 subjects, 200 images, 63 channels, 250 timepoints]
+```
+
+Result: the minimal raw EEG token branch did not work.
+
+| model | val latent rank | test latent rank | shifted | top10/w0.5 rerank top1 |
+|---|---:|---:|---:|---:|
+| global token pooling | 0.5557 | 0.4963 | 0.4831 | 0.4300 |
+| ROI-query attention | 0.5173 | 0.4974 | 0.5046 | 0.3650 |
+
+Both are near chance on unseen test200 TRIBE latent retrieval, and reranking
+hurts the frozen ATM baseline. A quick ATM-token sanity check was better for a
+global head (`~0.91` test latent rank percentile) but the query head was still
+weak (`~0.58`), both below the closed-form frozen-ATM ridge baseline (`0.9561`).
+
+Interpretation: the ROI-query architecture is still the right shape for spatial
+distillation, but `256` TRIBE-labeled train images are not enough to train a new
+token-level spatial branch from scratch. The practical next step is to scale
+TRIBE target extraction first, then retry this branch with many more train
+images and ideally true anatomical visual ROI targets.
+
 ## What This Means For The Story
 
 The stronger story is no longer:
