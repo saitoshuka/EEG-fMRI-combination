@@ -417,15 +417,24 @@ Key test200 rows:
 
 The trained semantic-only head improves similarity calibration
 (`diag-offdiag`) but still hurts retrieval ranking relative to the original
-frozen ATM embedding. Therefore a future ROI or semantic-ROI branch should be
-judged against two baselines:
+frozen ATM embedding. This does not make `frozen ATM direct` a fair
+`1654`-image training-budget baseline, because the ATM backbone was already
+trained on the larger THINGS-EEG training set. It should be treated as a
+full-data pretrained reference or deployment anchor.
 
-- same-budget semantic-only head/blend;
-- the stronger frozen ATM direct baseline.
+Therefore a future ROI or semantic-ROI branch should be judged in two separate
+ways:
 
-Only beating the same-budget head is a weak positive. Beating or preserving the
-frozen ATM retrieval baseline while improving brain-space metrics would be the
-stronger claim.
+- fair budget-matched ablation: same frozen backbone, same train-image subset,
+  same number of extra targets, semantic-only head/blend versus
+  semantic-plus-spatial head/blend;
+- practical deployment check: whether adding the spatial branch preserves or
+  improves the stronger frozen ATM direct retrieval behavior.
+
+Only the first comparison answers whether ROI/TRIBE spatial supervision is
+better than semantic-only under the same new supervision budget. The second
+comparison answers whether the added spatial branch is actually useful on top of
+the already strong pretrained EEG image model.
 
 ## Visual And Semantic ROI Targets
 

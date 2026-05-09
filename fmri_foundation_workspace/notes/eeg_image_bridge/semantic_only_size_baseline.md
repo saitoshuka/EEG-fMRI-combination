@@ -23,7 +23,8 @@ This is the size-matched baseline required before claiming that visual/semantic 
 
 ## Readout
 
-- `frozen_atm_direct` is the strong existing semantic baseline and does not use the sampled train images.
+- `frozen_atm_direct` is the strong existing pretrained reference. It is not a size-matched training-budget baseline because the ATM backbone was already trained on the larger THINGS-EEG training set.
 - `semantic_ridge_clip` trains a CLIP-image head from frozen ATM EEG rows using the same number of train images that a future ROI branch would get.
 - `semantic_residual_blend` validates a small residual blend between frozen ATM and the semantic ridge head inside the sampled train set.
-- Any ROI/semantic-ROI branch trained with the same image budget must beat these semantic-only rows without reducing retrieval stability.
+- The fair size-matched comparison for a future ROI/semantic-ROI branch is therefore: same frozen ATM backbone, same train-image subset, same number of train targets, semantic-only head/blend versus semantic-plus-spatial head/blend.
+- `frozen_atm_direct` should be reported separately as a full-data pretrained reference or deployment anchor, not as the fair `1654`-image baseline.
