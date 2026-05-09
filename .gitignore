@@ -12,6 +12,19 @@ external/NeuroSTORM/
 external/tribev2/
 external/tribev2_paper/
 
+# Clean workspace for the fMRI-foundation pivot. Keep lightweight plans/scripts
+# tracked, but leave third-party repos, PDFs, checkpoints, caches, and outputs
+# local-only.
+fmri_foundation_workspace/repos/
+fmri_foundation_workspace/references/
+fmri_foundation_workspace/cache/
+fmri_foundation_workspace/data/
+fmri_foundation_workspace/results/
+fmri_foundation_workspace/notes/**/*.html
+fmri_foundation_workspace/notes/**/*.txt
+!fmri_foundation_workspace/data/.gitkeep
+!fmri_foundation_workspace/results/.gitkeep
+
 # Large local data and download state.
 downloads/paired_datasets/
 downloads/archives/
