@@ -28,3 +28,17 @@ notification could not be sent.
 For non-Codex or shell-only workflows, use `scripts/notify_slack_summary.py` as a
 fallback notifier. The fallback script reads Slack credentials only from
 environment variables.
+
+## Experiment Execution Principle
+
+When optimizing models or designing ablations, run experiments for decision
+value, not for table completion.
+
+1. Experiments should be driven by a clear hypothesis and decision value. Do not
+   run experiments merely to fill out comparisons, make an ablation table look
+   complete, or confirm a point that does not affect the next decision.
+2. Avoid exhaustive sweeps in low-marginal-information directions. If an
+   experiment is predictable to add little to performance improvement, direction
+   selection, or future method design, especially when it only repeats evidence
+   that something is infeasible or ineffective, stop rather than continuing to
+   enumerate variants.
