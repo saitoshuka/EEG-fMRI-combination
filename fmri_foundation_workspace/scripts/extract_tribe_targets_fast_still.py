@@ -36,12 +36,21 @@ DEFAULT_CACHE = WORKSPACE / "cache" / "tribe_cuda_faststill"
 DEFAULT_OUT_DIR = WORKSPACE / "results" / "eeg_image_bridge" / "tribe_targets"
 
 
-def patch_fast_still_video_extractor() -> None:
+def patch_fast_still_video_extractor(precision: str = "fp32") -> None:
     """Patch neuralset's HuggingFaceVideo extractor for static still videos."""
 
     import torch
     from neuralset import base as nsbase
     from neuralset.extractors import video as video_mod
+
+    if precision not in {"fp32", "fp16", "bf16"}:
+        raise ValueError(f"Unsupported precision: {precision}")
+
+    autocast_dtype = None
+    if precision == "fp16":
+        autocast_dtype = torch.float16
+    elif precision == "bf16":
+        autocast_dtype = torch.bfloat16
 
     def _get_data_fast_still(self, events) -> Iterable[nsbase.TimedArray]:
         logging.getLogger("neuralset").setLevel(logging.INFO)
@@ -62,6 +71,8 @@ def patch_fast_still_video_extractor() -> None:
             object.__setattr__(self, "_fast_still_model", model)
         if model.model.device.type == "cpu":
             model.model.to(self.image.device)
+        if autocast_dtype is not None and model.model.device.type == "cuda":
+            model.model.to(dtype=autocast_dtype)
 
         freq0 = events[0].frequency if self.frequency == "native" else self.frequency
         clip_duration = 1 / freq0 if self.clip_duration is None else self.clip_duration
@@ -97,8 +108,15 @@ def patch_fast_still_video_extractor() -> None:
                 if audio is not None
                 else None
             )
-            with torch.inference_mode():
-                t_embd = model.predict_hidden_states(data, audio_clip)
+            if autocast_dtype is not None and model.model.device.type == "cuda":
+                with torch.inference_mode(), torch.autocast(
+                    device_type="cuda",
+                    dtype=autocast_dtype,
+                ):
+                    t_embd = model.predict_hidden_states(data, audio_clip)
+            else:
+                with torch.inference_mode():
+                    t_embd = model.predict_hidden_states(data, audio_clip)
             if t_embd.shape[0] != 1:
                 raise RuntimeError(f"Found several batches: {tuple(t_embd.shape)}")
             t_embd = t_embd[0]
@@ -139,6 +157,8 @@ def main() -> int:
     parser.add_argument("--duration-sec", type=float, default=2.0)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--tag", default="faststill")
+    parser.add_argument("--precision", choices=["fp32", "fp16", "bf16"], default="fp32")
+    parser.add_argument("--tribe-batch-size", type=int, default=None)
     parser.add_argument("--save-raw-preds", action=argparse.BooleanOptionalAction, default=True)
     args = parser.parse_args()
 
@@ -151,10 +171,12 @@ def main() -> int:
         "device": args.device,
         "cache_folder": str(args.cache_folder),
         "fast_still": True,
+        "precision": args.precision,
+        "tribe_batch_size": args.tribe_batch_size,
     }
 
     try:
-        patch_fast_still_video_extractor()
+        patch_fast_still_video_extractor(args.precision)
         from tribev2 import TribeModel
 
         rows = load_rows(args.manifest, args.offset, args.limit)
@@ -183,6 +205,8 @@ def main() -> int:
         # The monkey-patched extractor uses CUDA directly. Avoid forked dataloader
         # workers because CUDA cannot be re-initialized in forked subprocesses.
         model.data.num_workers = 0
+        if args.tribe_batch_size is not None:
+            model.data.batch_size = int(args.tribe_batch_size)
         preds, segments = model.predict(pd.DataFrame(events), verbose=True)
         by_timeline: dict[str, list[np.ndarray]] = defaultdict(list)
         segment_rows = []

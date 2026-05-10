@@ -28,6 +28,12 @@ def main() -> int:
     parser.add_argument("--size", type=int, default=256)
     parser.add_argument("--seed", type=int, default=33)
     parser.add_argument(
+        "--extend-from",
+        type=Path,
+        default=None,
+        help="Preserve an existing sampled manifest as the prefix, then sample remaining rows.",
+    )
+    parser.add_argument(
         "--by-concept",
         action="store_true",
         help="Sample at most one image per concept before filling remaining slots.",
@@ -38,7 +44,21 @@ def main() -> int:
         rows = list(csv.DictReader(f))
 
     rng = np.random.default_rng(args.seed)
-    if args.by_concept:
+    prefix_indices: list[int] = []
+    if args.extend_from is not None:
+        with args.extend_from.open(newline="", encoding="utf-8") as f:
+            prefix_rows = list(csv.DictReader(f))
+        prefix_indices = [int(row["image_index"]) for row in prefix_rows]
+        if len(prefix_indices) > args.size:
+            raise ValueError(
+                f"extend-from has {len(prefix_indices)} rows, larger than requested size={args.size}"
+            )
+        if len(set(prefix_indices)) != len(prefix_indices):
+            raise ValueError(f"extend-from contains duplicate image_index values: {args.extend_from}")
+        remaining = np.array([idx for idx in range(len(rows)) if idx not in set(prefix_indices)])
+        extra = rng.choice(remaining, size=args.size - len(prefix_indices), replace=False)
+        indices = np.concatenate([np.array(prefix_indices), extra])
+    elif args.by_concept:
         by_concept: dict[str, list[int]] = {}
         for idx, row in enumerate(rows):
             by_concept.setdefault(row["concept"], []).append(idx)

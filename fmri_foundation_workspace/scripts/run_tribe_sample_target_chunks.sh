@@ -12,6 +12,8 @@ TAG=${TAG:-train_seed33_classbalanced1654}
 CHECKPOINTS=${CHECKPOINTS:-}
 RUN_VALIDATION=${RUN_VALIDATION:-0}
 FAST_STILL=${FAST_STILL:-0}
+PRECISION=${PRECISION:-fp32}
+TRIBE_BATCH_SIZE=${TRIBE_BATCH_SIZE:-}
 LOG_DIR=${LOG_DIR:-fmri_foundation_workspace/results/eeg_image_bridge/logs}
 TARGET_DIR=${TARGET_DIR:-fmri_foundation_workspace/results/eeg_image_bridge/tribe_targets}
 VALIDATION_DIR=${VALIDATION_DIR:-fmri_foundation_workspace/results/eeg_image_bridge/budget_validations}
@@ -29,6 +31,8 @@ echo "tag=${TAG}"
 echo "checkpoints=${CHECKPOINTS}"
 echo "run_validation=${RUN_VALIDATION}"
 echo "fast_still=${FAST_STILL}"
+echo "precision=${PRECISION}"
+echo "tribe_batch_size=${TRIBE_BATCH_SIZE}"
 echo "log=${LOG}"
 
 if [[ ! -f "${MANIFEST}" ]]; then
@@ -108,6 +112,10 @@ while [[ "${offset}" -lt "${TOTAL}" ]]; do
       --limit "${limit}"
 
     if [[ "${FAST_STILL}" == "1" ]]; then
+      batch_args=()
+      if [[ -n "${TRIBE_BATCH_SIZE}" ]]; then
+        batch_args=(--tribe-batch-size "${TRIBE_BATCH_SIZE}")
+      fi
       "${TRIBE_PY}" fmri_foundation_workspace/scripts/extract_tribe_targets_fast_still.py \
         --manifest "${MANIFEST}" \
         --offset "${offset}" \
@@ -115,6 +123,8 @@ while [[ "${offset}" -lt "${TOTAL}" ]]; do
         --device cuda \
         --tag "${TAG}" \
         --cache-folder "fmri_foundation_workspace/cache/tribe_cuda_faststill_${TAG}" \
+        --precision "${PRECISION}" \
+        "${batch_args[@]}" \
         --no-save-raw-preds
     else
       "${TRIBE_PY}" fmri_foundation_workspace/scripts/extract_tribe_targets_from_manifest.py \
