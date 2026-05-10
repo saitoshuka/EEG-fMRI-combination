@@ -42,6 +42,7 @@ logs/slack_notifications.jsonl
 
 # Derived feature caches can be regenerated from scripts.
 data/derived/
+data/thing_eeg/
 data/pooled_v1/
 data/pooled_raw_v1*/
 data/pooled_raw_schaefer100_mni_proxy*/
