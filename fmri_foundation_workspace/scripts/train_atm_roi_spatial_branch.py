@@ -853,6 +853,14 @@ def main() -> int:
     rows = []
     out_dir = args.out_dir / (args.tag or f"{args.mode}_{args.roi_kind}_n{len(train_image_index)}")
     out_dir.mkdir(parents=True, exist_ok=True)
+    best_checkpoints: dict[str, dict[str, float | int | str | dict[str, float | int | str]]] = {}
+    best_specs = {
+        "best_clip_top1": ("clip_top1", out_dir / "model_best_clip_top1.pt"),
+        "best_clip_top5": ("clip_top5", out_dir / "model_best_clip_top5.pt"),
+        "best_clip_rank": ("clip_rank_percentile", out_dir / "model_best_clip_rank.pt"),
+        "best_roi_top1": ("roi_top1", out_dir / "model_best_roi_top1.pt"),
+        "best_roi_rank": ("roi_rank_percentile", out_dir / "model_best_roi_rank.pt"),
+    }
 
     for epoch in range(args.epochs):
         model.train()
@@ -905,9 +913,24 @@ def main() -> int:
                 )
             )
         rows.append(row)
+        for best_name, (metric_name, checkpoint_path) in best_specs.items():
+            if metric_name not in row:
+                continue
+            metric_value = float(row[metric_name])
+            current = best_checkpoints.get(best_name)
+            if current is None or metric_value > float(current["metric_value"]):
+                torch.save(model.state_dict(), checkpoint_path)
+                best_checkpoints[best_name] = {
+                    "metric": metric_name,
+                    "metric_value": metric_value,
+                    "epoch": int(row["epoch"]),
+                    "path": str(checkpoint_path),
+                    "row": dict(row),
+                }
         print(json.dumps(row, indent=2))
 
     torch.save(model.state_dict(), out_dir / "model.pt")
+    torch.save(model.state_dict(), out_dir / "model_final.pt")
     with (out_dir / "metrics.csv").open("w", newline="", encoding="utf-8") as f:
         keys = sorted({key for row in rows for key in row})
         writer = csv.DictWriter(f, fieldnames=keys)
@@ -943,6 +966,7 @@ def main() -> int:
                     else "enc_out[:, :63, :] with no subject token"
                 ),
                 "roi_group_feature_shape": list(group_features.shape),
+                "best_checkpoints": best_checkpoints,
                 "rows": rows,
             },
             indent=2,
