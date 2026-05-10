@@ -65,6 +65,7 @@ DEFAULT_TEST_ROI = (
 )
 DEFAULT_OUT_DIR = WORKSPACE / "results" / "eeg_image_bridge" / "atm_roi_spatial_branch"
 DEFAULT_EEG_CACHE_DIR = WORKSPACE / "cache" / "eeg_image_bridge" / "atm_eeg_subsets"
+DEFAULT_EEG_MEMMAP_DIR = WORKSPACE / "cache" / "eeg_image_bridge" / "thing_eeg_memmap_float32"
 
 
 def set_global_seed(seed: int) -> None:
@@ -427,6 +428,64 @@ def load_subject_train_subset(data_root: Path, subject: str, image_index: np.nda
     return torch.from_numpy(eeg)  # image, repeat, channel, time
 
 
+def ensure_subject_train_memmap(data_root: Path, subject: str, memmap_dir: Path) -> Path:
+    memmap_dir.mkdir(parents=True, exist_ok=True)
+    out_path = memmap_dir / f"{subject}_preprocessed_eeg_training_float32.npy"
+    if out_path.exists():
+        return out_path
+    src_path = data_root / subject / "preprocessed_eeg_training.npy"
+    payload = np.load(src_path, allow_pickle=True)
+    arr = payload["preprocessed_eeg_data"].astype("float32")
+    tmp_path = out_path.with_suffix(".tmp.npy")
+    np.save(tmp_path, arr)
+    tmp_path.replace(out_path)
+    print(f"Wrote train EEG memmap source {out_path}", flush=True)
+    return out_path
+
+
+class LazyRoiTrainDataset(Dataset):
+    """Memory-safe train dataset backed by per-subject float32 memmap arrays."""
+
+    def __init__(
+        self,
+        data_root: Path,
+        subjects: list[str],
+        image_index: np.ndarray,
+        clip_features: Tensor,
+        roi_targets: Tensor,
+        memmap_dir: Path,
+    ):
+        self.subjects = subjects
+        self.image_index = image_index.astype(int)
+        self.clip_features = clip_features
+        self.roi_targets = roi_targets
+        self.memmap_paths = [
+            ensure_subject_train_memmap(data_root, subject, memmap_dir)
+            for subject in subjects
+        ]
+        self.arrays = [np.load(path, mmap_mode="r") for path in self.memmap_paths]
+        self.n_images = int(len(self.image_index))
+        self.n_repeats = int(self.arrays[0].shape[1])
+        self.samples_per_subject = self.n_images * self.n_repeats
+
+    def __len__(self) -> int:
+        return len(self.subjects) * self.samples_per_subject
+
+    def __getitem__(self, idx: int) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        subject_idx = idx // self.samples_per_subject
+        rem = idx % self.samples_per_subject
+        image_local = rem // self.n_repeats
+        repeat = rem % self.n_repeats
+        image_original = int(self.image_index[image_local])
+        eeg = np.asarray(self.arrays[subject_idx][image_original, repeat], dtype=np.float32).copy()
+        return (
+            torch.from_numpy(eeg),
+            torch.tensor(subject_to_id(self.subjects[subject_idx]), dtype=torch.long),
+            self.clip_features[image_local],
+            self.roi_targets[image_local],
+        )
+
+
 def load_subject_test(data_root: Path, subject: str, image_index: np.ndarray) -> torch.Tensor:
     path = data_root / subject / "preprocessed_eeg_test.npy"
     data = np.load(path, allow_pickle=True)
@@ -656,12 +715,15 @@ def main() -> int:
     parser.add_argument("--image-root", type=Path, default=IMAGE_ROOT)
     parser.add_argument("--data-root", type=Path, default=IMAGE_ROOT / "Preprocessed_data_250Hz")
     parser.add_argument("--eeg-cache-dir", type=Path, default=DEFAULT_EEG_CACHE_DIR)
+    parser.add_argument("--eeg-memmap-dir", type=Path, default=DEFAULT_EEG_MEMMAP_DIR)
     parser.add_argument("--no-eeg-cache", action="store_true")
+    parser.add_argument("--lazy-train-eeg", action="store_true")
     parser.add_argument("--subjects", nargs="+", default=[f"sub-{i:02d}" for i in range(1, 11)])
     parser.add_argument("--max-images", type=int, default=None)
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--eval-batch-size", type=int, default=64)
+    parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--lambda-roi", type=float, default=0.1)
     parser.add_argument("--lambda-roi-col", type=float, default=0.01)
@@ -713,24 +775,37 @@ def main() -> int:
 
     eeg_cache_dir = None if args.no_eeg_cache else args.eeg_cache_dir
     cache_tag = args.train_roi.stem
-    eeg_subset = load_or_build_train_eeg_subset(
-        args.data_root,
-        args.subjects,
-        train_image_index,
-        cache_dir=eeg_cache_dir,
-        cache_tag=cache_tag,
-        max_images=args.max_images,
-    )
-    dataset = RoiTrainDataset(eeg_subset, clip_train, roi_train)
+    eeg_subset = None
+    if args.lazy_train_eeg:
+        dataset = LazyRoiTrainDataset(
+            args.data_root,
+            args.subjects,
+            train_image_index,
+            clip_train,
+            roi_train,
+            args.eeg_memmap_dir,
+        )
+    else:
+        eeg_subset = load_or_build_train_eeg_subset(
+            args.data_root,
+            args.subjects,
+            train_image_index,
+            cache_dir=eeg_cache_dir,
+            cache_tag=cache_tag,
+            max_images=args.max_images,
+        )
+        dataset = RoiTrainDataset(eeg_subset, clip_train, roi_train)
+    train_samples = int(len(dataset))
     loader_generator = torch.Generator()
     loader_generator.manual_seed(args.seed)
     loader = DataLoader(
         dataset,
         batch_size=args.batch_size,
         shuffle=True,
-        num_workers=0,
+        num_workers=args.num_workers,
         drop_last=True,
         generator=loader_generator,
+        pin_memory=device.type == "cuda",
     )
 
     model = AtmSemanticSpatial(
@@ -765,7 +840,9 @@ def main() -> int:
                     "train_images": int(len(train_image_index)),
                     "subjects": args.subjects,
                     "eeg_cache_dir": str(eeg_cache_dir) if eeg_cache_dir is not None else None,
-                    "train_samples": int(eeg_subset.eeg.shape[0]),
+                    "eeg_memmap_dir": str(args.eeg_memmap_dir) if args.lazy_train_eeg else None,
+                    "lazy_train_eeg": bool(args.lazy_train_eeg),
+                    "train_samples": train_samples,
                     "test_shape": list(test_eeg_stack.shape) if test_eeg_stack is not None else None,
                 },
                 indent=2,
@@ -847,6 +924,10 @@ def main() -> int:
                 "subjects": args.subjects,
                 "out_dir": str(out_dir),
                 "eeg_cache_dir": str(eeg_cache_dir) if eeg_cache_dir is not None else None,
+                "eeg_memmap_dir": str(args.eeg_memmap_dir) if args.lazy_train_eeg else None,
+                "lazy_train_eeg": bool(args.lazy_train_eeg),
+                "train_samples": train_samples,
+                "num_workers": args.num_workers,
                 "atm_d_model": args.atm_d_model,
                 "atm_heads": args.atm_heads,
                 "atm_layers": args.atm_layers,

@@ -9,6 +9,7 @@ IMAGE_ROOT=${IMAGE_ROOT:-/mnt/c/Users/xinji/Desktop/Image Reconstruction}
 DATA_ROOT=${DATA_ROOT:-/home/sudaxin/projects/paired_data/data/thing_eeg/Preprocessed_data_250Hz}
 RESULTS=${RESULTS:-fmri_foundation_workspace/results/eeg_image_bridge}
 CACHE_DIR=${CACHE_DIR:-fmri_foundation_workspace/cache/eeg_image_bridge/atm_eeg_subsets}
+EEG_MEMMAP_DIR=${EEG_MEMMAP_DIR:-fmri_foundation_workspace/cache/eeg_image_bridge/thing_eeg_memmap_float32}
 OUT_DIR=${OUT_DIR:-$RESULTS/atm_roi_spatial_branch}
 LOG_DIR=${LOG_DIR:-$RESULTS/logs}
 mkdir -p "$LOG_DIR"
@@ -18,6 +19,7 @@ SEED=${SEED:-33}
 EPOCHS=${EPOCHS:-20}
 BATCH_SIZE=${BATCH_SIZE:-512}
 EVAL_BATCH_SIZE=${EVAL_BATCH_SIZE:-256}
+NUM_WORKERS=${NUM_WORKERS:-2}
 LR=${LR:-3e-4}
 ATM_D_MODEL=${ATM_D_MODEL:-256}
 ATM_HEADS=${ATM_HEADS:-4}
@@ -102,9 +104,12 @@ train_model() {
     --image-root "$IMAGE_ROOT" \
     --data-root "$DATA_ROOT" \
     --eeg-cache-dir "$CACHE_DIR" \
+    --eeg-memmap-dir "$EEG_MEMMAP_DIR" \
+    --lazy-train-eeg \
     --epochs "$EPOCHS" \
     --batch-size "$BATCH_SIZE" \
     --eval-batch-size "$EVAL_BATCH_SIZE" \
+    --num-workers "$NUM_WORKERS" \
     --lr "$LR" \
     --lambda-roi "$lambda_roi" \
     --lambda-roi-col 0 \
@@ -160,8 +165,11 @@ run_cmd "$PY" fmri_foundation_workspace/scripts/train_atm_roi_spatial_branch.py 
   --image-root "$IMAGE_ROOT" \
   --data-root "$DATA_ROOT" \
   --eeg-cache-dir "$CACHE_DIR" \
+  --eeg-memmap-dir "$EEG_MEMMAP_DIR" \
+  --lazy-train-eeg \
   --batch-size "$BATCH_SIZE" \
   --eval-batch-size "$EVAL_BATCH_SIZE" \
+  --num-workers "$NUM_WORKERS" \
   --atm-d-model "$ATM_D_MODEL" \
   --atm-heads "$ATM_HEADS" \
   --atm-layers "$ATM_LAYERS" \
