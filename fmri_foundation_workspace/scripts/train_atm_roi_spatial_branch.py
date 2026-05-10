@@ -21,6 +21,7 @@ import hashlib
 import json
 import math
 import os
+import random
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -64,6 +65,14 @@ DEFAULT_TEST_ROI = (
 )
 DEFAULT_OUT_DIR = WORKSPACE / "results" / "eeg_image_bridge" / "atm_roi_spatial_branch"
 DEFAULT_EEG_CACHE_DIR = WORKSPACE / "cache" / "eeg_image_bridge" / "atm_eeg_subsets"
+
+
+def set_global_seed(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 
 class Config:
@@ -669,8 +678,10 @@ def main() -> int:
     parser.add_argument("--tag", default="")
     parser.add_argument("--eval-every", type=int, default=1)
     parser.add_argument("--cache-only", action="store_true")
+    parser.add_argument("--seed", type=int, default=33)
     args = parser.parse_args()
 
+    set_global_seed(args.seed)
     device = torch.device(args.device if torch.cuda.is_available() or args.device == "cpu" else "cpu")
     train_roi_npz = np.load(args.train_roi, allow_pickle=True)
     test_roi_npz = np.load(args.test_roi, allow_pickle=True)
@@ -711,7 +722,16 @@ def main() -> int:
         max_images=args.max_images,
     )
     dataset = RoiTrainDataset(eeg_subset, clip_train, roi_train)
-    loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=0, drop_last=True)
+    loader_generator = torch.Generator()
+    loader_generator.manual_seed(args.seed)
+    loader = DataLoader(
+        dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=0,
+        drop_last=True,
+        generator=loader_generator,
+    )
 
     model = AtmSemanticSpatial(
         roi_names=roi_names,
@@ -834,6 +854,7 @@ def main() -> int:
                 "atm_d_ff": args.atm_d_ff,
                 "subject_mode": args.subject_mode,
                 "semantic_head": args.semantic_head,
+                "seed": args.seed,
                 "ordered_roi_supervision": True,
                 "atm_channel_token_slice": (
                     "enc_out[:, 1:64, :] when subject token is present"

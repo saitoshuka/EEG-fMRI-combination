@@ -173,28 +173,43 @@ def main() -> int:
     keys = sorted({(r["roi_kind"], r["roi_group"]) for r in rows})
     for roi_kind, group in keys:
         budget_rows = [r for r in rows if r["roi_kind"] == roi_kind and r["roi_group"] == group]
-        by_budget = {int(r["train_images"]): r for r in budget_rows}
-        if 4096 in by_budget and 8192 in by_budget:
-            r4, r8 = by_budget[4096], by_budget[8192]
-            comparison_rows.append(
-                {
-                    "roi_kind": roi_kind,
-                    "roi_group": group,
-                    "n_roi": r4["n_roi"],
-                    "rank_4096": r4["rank"],
-                    "rank_8192": r8["rank"],
-                    "rank_delta": float(r8["rank"]) - float(r4["rank"]),
-                    "rank_signal_4096": r4["rank_signal"],
-                    "rank_signal_8192": r8["rank_signal"],
-                    "rank_signal_delta": float(r8["rank_signal"]) - float(r4["rank_signal"]),
-                    "col_corr_4096": r4["col_corr"],
-                    "col_corr_8192": r8["col_corr"],
-                    "col_corr_delta": float(r8["col_corr"]) - float(r4["col_corr"]),
-                }
-            )
+        by_budget: dict[int, dict[str, float | int | str]] = {}
+        for row in budget_rows:
+            budget = int(row["train_images"])
+            current = by_budget.get(budget)
+            if current is None or float(row["rank"]) > float(current["rank"]):
+                by_budget[budget] = row
+        if len(by_budget) >= 2:
+            budgets = sorted(by_budget)
+            first = by_budget[budgets[0]]
+            out_row: dict[str, float | int | str] = {
+                "roi_kind": roi_kind,
+                "roi_group": group,
+                "n_roi": first["n_roi"],
+            }
+            for budget in budgets:
+                row = by_budget[budget]
+                out_row[f"best_run_{budget}"] = row["run"]
+                out_row[f"rank_{budget}"] = row["rank"]
+                out_row[f"shifted_rank_{budget}"] = row["shifted_rank"]
+                out_row[f"rank_signal_{budget}"] = row["rank_signal"]
+                out_row[f"col_corr_{budget}"] = row["col_corr"]
+            for prev, cur in zip(budgets[:-1], budgets[1:]):
+                out_row[f"rank_delta_{prev}_to_{cur}"] = float(by_budget[cur]["rank"]) - float(by_budget[prev]["rank"])
+                out_row[f"rank_signal_delta_{prev}_to_{cur}"] = (
+                    float(by_budget[cur]["rank_signal"]) - float(by_budget[prev]["rank_signal"])
+                )
+                out_row[f"col_corr_delta_{prev}_to_{cur}"] = float(by_budget[cur]["col_corr"]) - float(by_budget[prev]["col_corr"])
+            if 8192 in by_budget and 16540 in by_budget:
+                out_row["rank_delta_8192_to_16k"] = float(by_budget[16540]["rank"]) - float(by_budget[8192]["rank"])
+                out_row["rank_signal_delta_8192_to_16k"] = (
+                    float(by_budget[16540]["rank_signal"]) - float(by_budget[8192]["rank_signal"])
+                )
+            comparison_rows.append(out_row)
     comparison_path = out_dir / "per_group_residual_roi_scaling.csv"
     with comparison_path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=list(comparison_rows[0].keys()))
+        keys_out = sorted({key for row in comparison_rows for key in row})
+        writer = csv.DictWriter(f, fieldnames=keys_out)
         writer.writeheader()
         writer.writerows(comparison_rows)
 
