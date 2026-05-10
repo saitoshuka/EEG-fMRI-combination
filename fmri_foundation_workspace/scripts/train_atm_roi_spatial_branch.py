@@ -199,6 +199,39 @@ class ProjEeg(nn.Sequential):
         )
 
 
+class TokenAttentionSemanticHead(nn.Module):
+    """Learned semantic query pooling over ATM EEG tokens, without ShallowNet convs."""
+
+    def __init__(
+        self,
+        token_dim: int,
+        proj_dim: int = 1024,
+        n_heads: int = 4,
+        dropout: float = 0.1,
+    ):
+        super().__init__()
+        self.query = nn.Parameter(torch.randn(1, token_dim) * 0.02)
+        self.attn = nn.MultiheadAttention(token_dim, n_heads, dropout=dropout, batch_first=True)
+        self.norm = nn.LayerNorm(token_dim)
+        self.proj = nn.Sequential(
+            nn.Linear(token_dim, proj_dim),
+            ResidualAdd(
+                nn.Sequential(
+                    nn.GELU(),
+                    nn.Linear(proj_dim, proj_dim),
+                    nn.Dropout(dropout),
+                )
+            ),
+            nn.LayerNorm(proj_dim),
+        )
+
+    def forward(self, tokens: Tensor) -> Tensor:
+        query = self.query.unsqueeze(0).expand(tokens.shape[0], -1, -1)
+        pooled, _ = self.attn(query, tokens, tokens, need_weights=False)
+        pooled = self.norm(pooled.squeeze(1) + query.squeeze(1))
+        return self.proj(pooled)
+
+
 def parse_hemi(names: np.ndarray) -> torch.Tensor:
     return torch.tensor([0 if str(name).startswith("lh_") else 1 for name in names], dtype=torch.long)
 
@@ -310,6 +343,7 @@ class AtmSemanticSpatial(nn.Module):
         atm_layers: int = 1,
         atm_dropout: float = 0.25,
         atm_d_ff: int = 256,
+        semantic_head: str = "shallow",
         use_spatial: bool = True,
     ):
         super().__init__()
@@ -328,8 +362,18 @@ class AtmSemanticSpatial(nn.Module):
         )
         self.subject_mode = subject_mode
         self.atm_d_model = atm_d_model
-        self.enc_eeg = EncEeg(input_width=atm_d_model)
-        self.proj_eeg = ProjEeg(embedding_dim=self.enc_eeg.flat_dim)
+        self.semantic_head_name = semantic_head
+        if semantic_head == "shallow":
+            self.enc_eeg = EncEeg(input_width=atm_d_model)
+            self.proj_eeg = ProjEeg(embedding_dim=self.enc_eeg.flat_dim)
+        elif semantic_head == "attn":
+            self.semantic_pool = TokenAttentionSemanticHead(
+                token_dim=atm_d_model,
+                n_heads=atm_heads,
+                dropout=0.1,
+            )
+        else:
+            raise ValueError(f"Unknown semantic_head: {semantic_head}")
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
         self.loss_func = ClipLoss()
         self.use_spatial = use_spatial
@@ -344,7 +388,10 @@ class AtmSemanticSpatial(nn.Module):
 
     def forward(self, x: Tensor, subject_ids: Tensor) -> dict[str, Tensor]:
         tokens = self.encoder(x, None, subject_ids)
-        semantic = self.proj_eeg(self.enc_eeg(tokens))
+        if self.semantic_head_name == "shallow":
+            semantic = self.proj_eeg(self.enc_eeg(tokens))
+        else:
+            semantic = self.semantic_pool(tokens)
         out = {"semantic": F.normalize(semantic, dim=-1), "tokens": tokens}
         if self.use_spatial:
             roi_pred, roi_tokens = self.roi_branch(tokens)
@@ -616,6 +663,7 @@ def main() -> int:
     parser.add_argument("--atm-dropout", type=float, default=0.25)
     parser.add_argument("--atm-d-ff", type=int, default=256)
     parser.add_argument("--subject-mode", choices=["token", "none"], default="token")
+    parser.add_argument("--semantic-head", choices=["shallow", "attn"], default="shallow")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     parser.add_argument("--tag", default="")
@@ -675,6 +723,7 @@ def main() -> int:
         atm_layers=args.atm_layers,
         atm_dropout=args.atm_dropout,
         atm_d_ff=args.atm_d_ff,
+        semantic_head=args.semantic_head,
         use_spatial=args.mode == "spatial",
     ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
@@ -767,6 +816,7 @@ def main() -> int:
                 "atm_dropout": args.atm_dropout,
                 "atm_d_ff": args.atm_d_ff,
                 "subject_mode": args.subject_mode,
+                "semantic_head": args.semantic_head,
                 "ordered_roi_supervision": True,
                 "atm_channel_token_slice": (
                     "enc_out[:, 1:64, :] when subject token is present"

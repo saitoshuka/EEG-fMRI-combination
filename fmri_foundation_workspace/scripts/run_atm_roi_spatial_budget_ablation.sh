@@ -15,6 +15,7 @@ ATM_LAYERS="${ATM_LAYERS:-1}"
 ATM_DROPOUT="${ATM_DROPOUT:-0.25}"
 ATM_D_FF="${ATM_D_FF:-256}"
 SUBJECT_MODE="${SUBJECT_MODE:-none}"
+SEMANTIC_HEAD="${SEMANTIC_HEAD:-attn}"
 SUBJECTS="${SUBJECTS:-sub-01 sub-02 sub-03 sub-04 sub-05 sub-06 sub-07 sub-08 sub-09 sub-10}"
 DEVICE="${DEVICE:-cuda}"
 WAIT_FOR_EXTRACTION="${WAIT_FOR_EXTRACTION:-1}"
@@ -52,7 +53,7 @@ run_one() {
   local mode="$2"
   local roi_kind="$3"
   local train_roi="${ROI_DIR}/visual_roi_targets_${TAG}_n${budget}.npz"
-  local run_tag="atm_${mode}_${roi_kind}_${TAG}_n${budget}_d${ATM_D_MODEL}_${SUBJECT_MODE}"
+  local run_tag="atm_${mode}_${roi_kind}_${TAG}_n${budget}_d${ATM_D_MODEL}_${SUBJECT_MODE}_${SEMANTIC_HEAD}"
   local run_dir="${OUT_DIR}/${run_tag}"
   local run_log="${LOG_DIR}/${run_tag}.log"
 
@@ -78,6 +79,7 @@ run_one() {
     --atm-dropout "${ATM_DROPOUT}" \
     --atm-d-ff "${ATM_D_FF}" \
     --subject-mode "${SUBJECT_MODE}" \
+    --semantic-head "${SEMANTIC_HEAD}" \
     --device "${DEVICE}" \
     --tag "${run_tag}" \
     2>&1 | tee -a "${run_log}"
