@@ -18,6 +18,7 @@ SUBJECT_MODE="${SUBJECT_MODE:-none}"
 SUBJECTS="${SUBJECTS:-sub-01 sub-02 sub-03 sub-04 sub-05 sub-06 sub-07 sub-08 sub-09 sub-10}"
 DEVICE="${DEVICE:-cuda}"
 WAIT_FOR_EXTRACTION="${WAIT_FOR_EXTRACTION:-1}"
+EEG_CACHE_DIR="${EEG_CACHE_DIR:-fmri_foundation_workspace/cache/eeg_image_bridge/atm_eeg_subsets}"
 
 cd "${ROOT}"
 
@@ -65,6 +66,7 @@ run_one() {
     --mode "${mode}" \
     --roi-kind "${roi_kind}" \
     --train-roi "${train_roi}" \
+    --eeg-cache-dir "${EEG_CACHE_DIR}" \
     --subjects ${SUBJECTS} \
     --epochs "${EPOCHS}" \
     --batch-size "${BATCH_SIZE}" \

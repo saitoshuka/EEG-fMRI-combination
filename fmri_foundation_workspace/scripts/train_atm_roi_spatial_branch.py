@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import math
 import os
@@ -62,6 +63,7 @@ DEFAULT_TEST_ROI = (
     / "visual_roi_targets_n200.npz"
 )
 DEFAULT_OUT_DIR = WORKSPACE / "results" / "eeg_image_bridge" / "atm_roi_spatial_branch"
+DEFAULT_EEG_CACHE_DIR = WORKSPACE / "cache" / "eeg_image_bridge" / "atm_eeg_subsets"
 
 
 class Config:
@@ -402,6 +404,88 @@ def build_train_eeg_subset(
     )
 
 
+def cache_digest(subjects: list[str], image_index: np.ndarray, split: str) -> str:
+    h = hashlib.sha1()
+    h.update(split.encode("utf-8"))
+    h.update("\n".join(subjects).encode("utf-8"))
+    h.update(np.asarray(image_index, dtype=np.int64).tobytes())
+    return h.hexdigest()[:12]
+
+
+def load_or_build_train_eeg_subset(
+    data_root: Path,
+    subjects: list[str],
+    image_index: np.ndarray,
+    cache_dir: Path | None,
+    cache_tag: str,
+    max_images: int | None = None,
+) -> EegSubset:
+    if max_images is not None:
+        image_index = image_index[:max_images]
+    if cache_dir is None:
+        return build_train_eeg_subset(data_root, subjects, image_index)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    digest = cache_digest(subjects, image_index, "train")
+    cache_path = cache_dir / f"train_eeg_{cache_tag}_n{len(image_index)}_{digest}.pt"
+    if cache_path.exists():
+        payload = torch.load(cache_path, map_location="cpu", weights_only=False)
+        print(f"Loaded EEG train cache {cache_path}", flush=True)
+        return EegSubset(
+            eeg=payload["eeg"],
+            image_local=payload["image_local"],
+            subject_ids=payload["subject_ids"],
+        )
+    subset = build_train_eeg_subset(data_root, subjects, image_index)
+    tmp_path = cache_path.with_suffix(".tmp")
+    torch.save(
+        {
+            "eeg": subset.eeg,
+            "image_local": subset.image_local,
+            "subject_ids": subset.subject_ids,
+            "subjects": subjects,
+            "image_index": image_index,
+        },
+        tmp_path,
+    )
+    tmp_path.replace(cache_path)
+    print(f"Wrote EEG train cache {cache_path}", flush=True)
+    return subset
+
+
+def load_or_build_test_eeg_stack(
+    data_root: Path,
+    subjects: list[str],
+    image_index: np.ndarray,
+    cache_dir: Path | None,
+    cache_tag: str,
+) -> Tensor | None:
+    if cache_dir is None:
+        return None
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    digest = cache_digest(subjects, image_index, "test")
+    cache_path = cache_dir / f"test_eeg_{cache_tag}_n{len(image_index)}_{digest}.pt"
+    if cache_path.exists():
+        payload = torch.load(cache_path, map_location="cpu", weights_only=False)
+        print(f"Loaded EEG test cache {cache_path}", flush=True)
+        return payload["eeg"]
+    eeg = torch.stack(
+        [load_subject_test(data_root, subject, image_index) for subject in subjects],
+        dim=0,
+    )
+    tmp_path = cache_path.with_suffix(".tmp")
+    torch.save(
+        {
+            "eeg": eeg,
+            "subjects": subjects,
+            "image_index": image_index,
+        },
+        tmp_path,
+    )
+    tmp_path.replace(cache_path)
+    print(f"Wrote EEG test cache {cache_path}", flush=True)
+    return eeg
+
+
 class RoiTrainDataset(Dataset):
     def __init__(self, eeg_subset: EegSubset, clip_features: Tensor, roi_targets: Tensor):
         self.eeg = eeg_subset.eeg
@@ -480,13 +564,17 @@ def evaluate_clip_retrieval(
     roi_test: Tensor,
     device: torch.device,
     batch_size: int,
+    test_eeg_stack: Tensor | None = None,
 ) -> dict[str, float]:
     model.eval()
     sem_preds = []
     roi_preds = []
     with torch.no_grad():
-        for subject in subjects:
-            eeg = load_subject_test(data_root, subject, test_image_index)
+        for subject_idx, subject in enumerate(subjects):
+            if test_eeg_stack is None:
+                eeg = load_subject_test(data_root, subject, test_image_index)
+            else:
+                eeg = test_eeg_stack[subject_idx]
             sid = torch.full((len(eeg),), subject_to_id(subject), dtype=torch.long)
             for start in range(0, len(eeg), batch_size):
                 x = eeg[start : start + batch_size].to(device)
@@ -511,6 +599,8 @@ def main() -> int:
     parser.add_argument("--roi-kind", choices=["group", "parcel"], default="parcel")
     parser.add_argument("--image-root", type=Path, default=IMAGE_ROOT)
     parser.add_argument("--data-root", type=Path, default=IMAGE_ROOT / "Preprocessed_data_250Hz")
+    parser.add_argument("--eeg-cache-dir", type=Path, default=DEFAULT_EEG_CACHE_DIR)
+    parser.add_argument("--no-eeg-cache", action="store_true")
     parser.add_argument("--subjects", nargs="+", default=[f"sub-{i:02d}" for i in range(1, 11)])
     parser.add_argument("--max-images", type=int, default=None)
     parser.add_argument("--epochs", type=int, default=20)
@@ -561,8 +651,15 @@ def main() -> int:
     clip_train = F.normalize(clip_train_all[train_image_index], dim=-1)
     clip_test = F.normalize(clip_test, dim=-1)
 
-    eeg_subset = build_train_eeg_subset(
-        args.data_root, args.subjects, train_image_index, max_images=args.max_images
+    eeg_cache_dir = None if args.no_eeg_cache else args.eeg_cache_dir
+    cache_tag = args.train_roi.stem
+    eeg_subset = load_or_build_train_eeg_subset(
+        args.data_root,
+        args.subjects,
+        train_image_index,
+        cache_dir=eeg_cache_dir,
+        cache_tag=cache_tag,
+        max_images=args.max_images,
     )
     dataset = RoiTrainDataset(eeg_subset, clip_train, roi_train)
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=0, drop_last=True)
@@ -583,6 +680,13 @@ def main() -> int:
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
     test_image_index = test_roi_npz["image_index"].astype(int)
+    test_eeg_stack = load_or_build_test_eeg_stack(
+        args.data_root,
+        args.subjects,
+        test_image_index,
+        cache_dir=eeg_cache_dir,
+        cache_tag=args.test_roi.stem,
+    )
     rows = []
     out_dir = args.out_dir / (args.tag or f"{args.mode}_{args.roi_kind}_n{len(train_image_index)}")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -634,6 +738,7 @@ def main() -> int:
                     roi_test,
                     device,
                     args.eval_batch_size,
+                    test_eeg_stack=test_eeg_stack,
                 )
             )
         rows.append(row)
@@ -655,6 +760,7 @@ def main() -> int:
                 "train_images": int(len(train_image_index)),
                 "subjects": args.subjects,
                 "out_dir": str(out_dir),
+                "eeg_cache_dir": str(eeg_cache_dir) if eeg_cache_dir is not None else None,
                 "atm_d_model": args.atm_d_model,
                 "atm_heads": args.atm_heads,
                 "atm_layers": args.atm_layers,
