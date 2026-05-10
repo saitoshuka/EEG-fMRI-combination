@@ -17,6 +17,8 @@ The new script `fmri_foundation_workspace/scripts/export_atm_roi_query_target_co
 - predicted-query x TRIBE-target ROI correlation heatmaps
 - ROI-group confusion heatmaps
 - per-query identity tables
+- TRIBE target ROI x ROI self-similarity heatmaps
+- query-row shuffled binding baselines
 - summary identity metrics
 
 This complements the existing query-time dependency outputs:
@@ -27,10 +29,15 @@ This complements the existing query-time dependency outputs:
 
 ## Primary Final-Checkpoint Results
 
-| model | n ROI | diag mean corr | offdiag mean corr | diag-offdiag | diag top1 | diag top5 | diag rank percentile | same-group offdiag | other-group offdiag |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| group12 residual lam005 | 12 | 0.0629 | -0.0591 | 0.1220 | 0.333 | 0.917 | 0.826 | 0.0598 | -0.0710 |
-| parcel38 residual lam005 | 38 | 0.1519 | -0.0096 | 0.1615 | 0.184 | 0.632 | 0.890 | 0.0421 | -0.0195 |
+| model | n ROI | diag corr | offdiag corr | diag-offdiag | shuffled diag-offdiag | diag top1 | diag top5 | diag rank percentile |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| group12 residual lam005 | 12 | 0.0629 | -0.0591 | 0.1220 | -0.0013 +/- 0.0273 | 0.333 | 0.917 | 0.826 |
+| parcel38 residual lam005 | 38 | 0.1519 | -0.0096 | 0.1615 | -0.0009 +/- 0.0196 | 0.184 | 0.632 | 0.890 |
+
+| model | same-group offdiag | other-group offdiag | same-other | shuffled same-other | query-target vs target-self matrix corr | group-matrix corr |
+|---|---:|---:|---:|---:|---:|---:|
+| group12 residual lam005 | 0.0598 | -0.0710 | 0.1309 | -0.0012 +/- 0.0298 | 0.5324 | 0.5415 |
+| parcel38 residual lam005 | 0.0421 | -0.0195 | 0.0616 | -0.0010 +/- 0.0136 | 0.6681 | 0.5610 |
 
 Interpretation:
 
@@ -38,6 +45,8 @@ Interpretation:
 - parcel38 diagonal top1 is not high, so the evidence is not "every query exactly predicts only its own parcel."
 - parcel38 diagonal rank percentile is high, meaning the intended target is usually ranked near the top.
 - same-group offdiagonal is higher than other-group offdiagonal, so nearby/related visual ROIs are confused more than unrelated groups. This supports group-level spatial specificity.
+- shuffled query-row baselines collapse diagonal and same-group advantages to approximately zero, so the observed structure is order-specific rather than a generic matrix artifact.
+- query-target matrices correlate with TRIBE target self-similarity matrices, especially for parcel38, suggesting EEG predictions partially recover the pseudo-cortical target-space geometry.
 
 ## Parcel38 Query-Time Dependency
 
@@ -70,14 +79,15 @@ Interpretation:
 
 Query-target confusion:
 
-- `fmri_foundation_workspace/results/eeg_image_bridge/atm_roi_query_target_confusion/residual_query_target_n16540_seed33_lam005_final_cpu/summary.json`
-- `fmri_foundation_workspace/results/eeg_image_bridge/atm_roi_query_target_confusion/residual_query_target_n16540_seed33_lam005_final_cpu/all_per_query_identity.csv`
-- `fmri_foundation_workspace/results/eeg_image_bridge/atm_roi_query_target_confusion/residual_query_target_n16540_seed33_lam005_final_cpu/all_group_confusion_matrix_long.csv`
+- `fmri_foundation_workspace/results/eeg_image_bridge/atm_roi_query_target_confusion/residual_query_target_n16540_seed33_lam005_final_cpu_v2/summary.json`
+- `fmri_foundation_workspace/results/eeg_image_bridge/atm_roi_query_target_confusion/residual_query_target_n16540_seed33_lam005_final_cpu_v2/all_per_query_identity.csv`
+- `fmri_foundation_workspace/results/eeg_image_bridge/atm_roi_query_target_confusion/residual_query_target_n16540_seed33_lam005_final_cpu_v2/all_group_confusion_matrix_long.csv`
 
 Main figures:
 
-- `fmri_foundation_workspace/results/eeg_image_bridge/atm_roi_query_target_confusion/residual_query_target_n16540_seed33_lam005_final_cpu/atm_spatial_parcel_clip_residual_train_seed33_budget16540_n16540_d256_none_lam005_model/query_target_corr_heatmap.png`
-- `fmri_foundation_workspace/results/eeg_image_bridge/atm_roi_query_target_confusion/residual_query_target_n16540_seed33_lam005_final_cpu/atm_spatial_parcel_clip_residual_train_seed33_budget16540_n16540_d256_none_lam005_model/group_confusion_heatmap.png`
+- `fmri_foundation_workspace/results/eeg_image_bridge/atm_roi_query_target_confusion/residual_query_target_n16540_seed33_lam005_final_cpu_v2/atm_spatial_parcel_clip_residual_train_seed33_budget16540_n16540_d256_none_lam005_model/query_target_corr_heatmap.png`
+- `fmri_foundation_workspace/results/eeg_image_bridge/atm_roi_query_target_confusion/residual_query_target_n16540_seed33_lam005_final_cpu_v2/atm_spatial_parcel_clip_residual_train_seed33_budget16540_n16540_d256_none_lam005_model/group_confusion_heatmap.png`
+- `fmri_foundation_workspace/results/eeg_image_bridge/atm_roi_query_target_confusion/residual_query_target_n16540_seed33_lam005_final_cpu_v2/atm_spatial_parcel_clip_residual_train_seed33_budget16540_n16540_d256_none_lam005_model/target_self_similarity_heatmap.png`
+- `fmri_foundation_workspace/results/eeg_image_bridge/atm_roi_query_target_confusion/residual_query_target_n16540_seed33_lam005_final_cpu_v2/atm_spatial_parcel_clip_residual_train_seed33_budget16540_n16540_d256_none_lam005_model/target_group_self_similarity_heatmap.png`
 - `fmri_foundation_workspace/results/eeg_image_bridge/atm_roi_query_time_dependency/residual_query_time_n16540_seed33_cpu/atm_spatial_parcel_clip_residual_train_seed33_budget16540_n16540_d256_none_lam005/keep_query_corr_signal.png`
 - `fmri_foundation_workspace/results/eeg_image_bridge/atm_roi_query_time_dependency/residual_query_time_n16540_seed33_cpu/atm_spatial_parcel_clip_residual_train_seed33_budget16540_n16540_d256_none_lam005/drop_delta_from_full.png`
-

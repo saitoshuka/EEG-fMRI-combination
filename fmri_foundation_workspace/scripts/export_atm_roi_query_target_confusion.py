@@ -60,6 +60,20 @@ def corr_matrix(pred: np.ndarray, target: np.ndarray) -> np.ndarray:
     return (pred_z.T @ target_z) / max(pred.shape[0] - 1, 1)
 
 
+def pearson_vec(x: np.ndarray, y: np.ndarray, eps: float = 1e-12) -> float:
+    x = x.astype("float64").reshape(-1)
+    y = y.astype("float64").reshape(-1)
+    mask = np.isfinite(x) & np.isfinite(y)
+    if not np.any(mask):
+        return float("nan")
+    x = x[mask] - x[mask].mean()
+    y = y[mask] - y[mask].mean()
+    denom = float(np.linalg.norm(x) * np.linalg.norm(y))
+    if denom < eps:
+        return float("nan")
+    return float((x * y).sum() / denom)
+
+
 def write_csv(rows: list[dict[str, float | int | str]], path: Path) -> None:
     if not rows:
         return
@@ -188,6 +202,59 @@ def summarize_identity(
     return summary, rows
 
 
+def summarize_shuffle_baseline(
+    mat: np.ndarray,
+    names: np.ndarray,
+    visual_group_json: dict[str, list[str]] | None,
+    run_name: str,
+    roi_kind: str,
+    n_shuffles: int,
+    seed: int,
+) -> dict[str, float | int | str]:
+    rng = np.random.default_rng(seed)
+    diag_adv = []
+    rank_pct = []
+    top1 = []
+    within_adv = []
+    for _ in range(n_shuffles):
+        perm = rng.permutation(mat.shape[0])
+        shuffled = mat[perm, :]
+        summary, _ = summarize_identity(shuffled, names, visual_group_json, run_name, roi_kind)
+        diag_adv.append(float(summary["diag_minus_offdiag_mean"]))
+        rank_pct.append(float(summary["diag_rank_percentile_mean"]))
+        top1.append(float(summary["diag_top1_fraction"]))
+        within_adv.append(float(summary["same_minus_other_group_offdiag"]))
+    return {
+        "shuffle_kind": "query_row_permutation",
+        "n_shuffles": int(n_shuffles),
+        "shuffle_seed": int(seed),
+        "shuffled_diag_minus_offdiag_mean": float(np.nanmean(diag_adv)),
+        "shuffled_diag_minus_offdiag_std": float(np.nanstd(diag_adv)),
+        "shuffled_diag_rank_percentile_mean": float(np.nanmean(rank_pct)),
+        "shuffled_diag_rank_percentile_std": float(np.nanstd(rank_pct)),
+        "shuffled_diag_top1_fraction_mean": float(np.nanmean(top1)),
+        "shuffled_diag_top1_fraction_std": float(np.nanstd(top1)),
+        "shuffled_same_minus_other_group_mean": float(np.nanmean(within_adv)),
+        "shuffled_same_minus_other_group_std": float(np.nanstd(within_adv)),
+    }
+
+
+def matrix_similarity_summary(
+    mat: np.ndarray,
+    target_self: np.ndarray,
+    group_mat: np.ndarray,
+    target_group_mat: np.ndarray,
+) -> dict[str, float]:
+    offdiag = ~np.eye(mat.shape[0], dtype=bool)
+    group_offdiag = ~np.eye(group_mat.shape[0], dtype=bool)
+    return {
+        "query_target_vs_target_self_matrix_corr_all": pearson_vec(mat, target_self),
+        "query_target_vs_target_self_matrix_corr_offdiag": pearson_vec(mat[offdiag], target_self[offdiag]),
+        "query_group_vs_target_group_matrix_corr_all": pearson_vec(group_mat, target_group_mat),
+        "query_group_vs_target_group_matrix_corr_offdiag": pearson_vec(group_mat[group_offdiag], target_group_mat[group_offdiag]),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs", nargs="+", type=Path, required=True)
@@ -198,6 +265,8 @@ def main() -> int:
     parser.add_argument("--tag", default="query_target_confusion")
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--batch-size", type=int, default=128)
+    parser.add_argument("--n-shuffles", type=int, default=200)
+    parser.add_argument("--shuffle-seed", type=int, default=33)
     args = parser.parse_args()
 
     device = torch.device(args.device if torch.cuda.is_available() or args.device == "cpu" else "cpu")
@@ -233,6 +302,7 @@ def main() -> int:
         assert eeg_stack is not None
         pred = predict_roi(model, eeg_stack, subjects, device, args.batch_size, "full")
         mat = corr_matrix(pred, target)
+        target_self = corr_matrix(target, target)
 
         run_out = out_root / f"{run_dir.name}_{args.checkpoint_name.replace('.pt', '')}"
         run_out.mkdir(parents=True, exist_ok=True)
@@ -242,6 +312,7 @@ def main() -> int:
             pred=pred,
             target=target,
             roi_names=names,
+            target_self_corr=target_self,
         )
         labels = [strip_hemi(str(name)) for name in names]  # type: ignore[union-attr]
         write_heatmap(
@@ -251,8 +322,17 @@ def main() -> int:
             f"{run_dir.name}: predicted query x target ROI correlation",
             run_out / "query_target_corr_heatmap.png",
         )
+        write_heatmap(
+            target_self,
+            labels,
+            labels,
+            f"{run_dir.name}: TRIBE target ROI x ROI self-similarity",
+            run_out / "target_self_similarity_heatmap.png",
+        )
 
         group_mat, group_labels = group_confusion(mat, names, visual_group_json)  # type: ignore[arg-type]
+        target_group_mat, target_group_labels = group_confusion(target_self, names, visual_group_json)  # type: ignore[arg-type]
+        assert group_labels == target_group_labels
         write_heatmap(
             group_mat,
             group_labels,
@@ -260,8 +340,27 @@ def main() -> int:
             f"{run_dir.name}: ROI-group confusion",
             run_out / "group_confusion_heatmap.png",
         )
+        write_heatmap(
+            target_group_mat,
+            group_labels,
+            group_labels,
+            f"{run_dir.name}: TRIBE target ROI-group self-similarity",
+            run_out / "target_group_self_similarity_heatmap.png",
+        )
 
         run_summary, query_rows = summarize_identity(mat, names, visual_group_json, run_dir.name, roi_kind)  # type: ignore[arg-type]
+        run_summary.update(matrix_similarity_summary(mat, target_self, group_mat, target_group_mat))
+        run_summary.update(
+            summarize_shuffle_baseline(
+                mat,
+                names,
+                visual_group_json,  # type: ignore[arg-type]
+                run_dir.name,
+                roi_kind,
+                args.n_shuffles,
+                args.shuffle_seed,
+            )
+        )
         run_summary["checkpoint_name"] = args.checkpoint_name
         summaries.append(run_summary)
         write_csv(query_rows, run_out / "per_query_identity.csv")
@@ -305,6 +404,22 @@ def main() -> int:
                 )
         write_csv(group_rows, run_out / "group_confusion_matrix_long.csv")
         all_group_rows.extend(group_rows)
+
+        target_group_rows = []
+        for i, query_group in enumerate(group_labels):
+            for j, target_group in enumerate(group_labels):
+                target_group_rows.append(
+                    {
+                        "run": run_dir.name,
+                        "roi_kind": roi_kind,
+                        "checkpoint_name": args.checkpoint_name,
+                        "query_group": query_group,
+                        "target_group": target_group,
+                        "target_self_mean_corr": float(target_group_mat[i, j]),
+                        "is_diagonal": int(i == j),
+                    }
+                )
+        write_csv(target_group_rows, run_out / "target_group_self_similarity_long.csv")
 
         print(json.dumps(run_summary, indent=2), flush=True)
 
