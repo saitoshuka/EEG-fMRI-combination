@@ -187,6 +187,12 @@ hardlink_matching_cache_stems "$(basename "$RESIDUAL_TEST" .npz)" "$(basename "$
 train_model "atm_semantic_group_train_seed33_budget16540_n16540_d256_none_seed33" \
   semantic group "$RESIDUAL_TRAIN" "$RESIDUAL_TEST" 0
 
+train_model "atm_spatial_parcel_raw_train_seed33_budget16540_n16540_d256_none_lam003" \
+  spatial parcel "$RAW_TRAIN" "$RAW_TEST" 0.03
+
+train_model "atm_spatial_group_raw_train_seed33_budget16540_n16540_d256_none_lam003" \
+  spatial group "$RAW_TRAIN" "$RAW_TEST" 0.03
+
 train_model "atm_spatial_parcel_clip_residual_train_seed33_budget16540_n16540_d256_none_lam003" \
   spatial parcel "$RESIDUAL_TRAIN" "$RESIDUAL_TEST" 0.03
 
@@ -198,8 +204,5 @@ train_model "atm_spatial_parcel_clip_residual_train_seed33_budget16540_n16540_d2
 
 train_model "atm_spatial_group_clip_residual_train_seed33_budget16540_n16540_d256_none_lam005" \
   spatial group "$RESIDUAL_TRAIN" "$RESIDUAL_TEST" 0.05
-
-train_model "atm_spatial_parcel_raw_train_seed33_budget16540_n16540_d256_none_lam003" \
-  spatial parcel "$RAW_TRAIN" "$RAW_TEST" 0.03
 
 log "ATM ROI 16k training queue complete"

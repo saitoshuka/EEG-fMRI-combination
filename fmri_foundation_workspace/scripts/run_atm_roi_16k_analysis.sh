@@ -28,6 +28,8 @@ GROUP_16K_003=$BRANCH_DIR/atm_spatial_group_clip_residual_train_seed33_budget165
 GROUP_16K_005=$BRANCH_DIR/atm_spatial_group_clip_residual_train_seed33_budget16540_n16540_d256_none_lam005
 PARCEL_16K_003=$BRANCH_DIR/atm_spatial_parcel_clip_residual_train_seed33_budget16540_n16540_d256_none_lam003
 PARCEL_16K_005=$BRANCH_DIR/atm_spatial_parcel_clip_residual_train_seed33_budget16540_n16540_d256_none_lam005
+RAW_GROUP_16K_003=$BRANCH_DIR/atm_spatial_group_raw_train_seed33_budget16540_n16540_d256_none_lam003
+RAW_PARCEL_16K_003=$BRANCH_DIR/atm_spatial_parcel_raw_train_seed33_budget16540_n16540_d256_none_lam003
 
 log() {
   printf '[%(%Y-%m-%d %H:%M:%S)T] %s\n' -1 "$*"
@@ -60,7 +62,9 @@ for path in \
   "$GROUP_16K_003" \
   "$GROUP_16K_005" \
   "$PARCEL_16K_003" \
-  "$PARCEL_16K_005"; do
+  "$PARCEL_16K_005" \
+  "$RAW_GROUP_16K_003" \
+  "$RAW_PARCEL_16K_003"; do
   if [[ "$path" == *.npz ]]; then
     while [[ ! -s "$path" ]]; do
       log "waiting for $path"
