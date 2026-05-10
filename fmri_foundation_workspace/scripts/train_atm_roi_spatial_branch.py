@@ -668,6 +668,7 @@ def main() -> int:
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     parser.add_argument("--tag", default="")
     parser.add_argument("--eval-every", type=int, default=1)
+    parser.add_argument("--cache-only", action="store_true")
     args = parser.parse_args()
 
     device = torch.device(args.device if torch.cuda.is_available() or args.device == "cpu" else "cpu")
@@ -736,6 +737,22 @@ def main() -> int:
         cache_dir=eeg_cache_dir,
         cache_tag=args.test_roi.stem,
     )
+    if args.cache_only:
+        print(
+            json.dumps(
+                {
+                    "cache_only": True,
+                    "train_images": int(len(train_image_index)),
+                    "subjects": args.subjects,
+                    "eeg_cache_dir": str(eeg_cache_dir) if eeg_cache_dir is not None else None,
+                    "train_samples": int(eeg_subset.eeg.shape[0]),
+                    "test_shape": list(test_eeg_stack.shape) if test_eeg_stack is not None else None,
+                },
+                indent=2,
+            ),
+            flush=True,
+        )
+        return 0
     rows = []
     out_dir = args.out_dir / (args.tag or f"{args.mode}_{args.roi_kind}_n{len(train_image_index)}")
     out_dir.mkdir(parents=True, exist_ok=True)

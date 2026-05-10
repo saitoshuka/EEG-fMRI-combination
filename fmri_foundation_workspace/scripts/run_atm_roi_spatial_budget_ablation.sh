@@ -20,6 +20,7 @@ SUBJECTS="${SUBJECTS:-sub-01 sub-02 sub-03 sub-04 sub-05 sub-06 sub-07 sub-08 su
 DEVICE="${DEVICE:-cuda}"
 WAIT_FOR_EXTRACTION="${WAIT_FOR_EXTRACTION:-1}"
 EEG_CACHE_DIR="${EEG_CACHE_DIR:-fmri_foundation_workspace/cache/eeg_image_bridge/atm_eeg_subsets}"
+DATA_ROOT="${DATA_ROOT:-/home/sudaxin/projects/paired_data/data/thing_eeg/Preprocessed_data_250Hz}"
 
 cd "${ROOT}"
 
@@ -67,6 +68,7 @@ run_one() {
     --mode "${mode}" \
     --roi-kind "${roi_kind}" \
     --train-roi "${train_roi}" \
+    --data-root "${DATA_ROOT}" \
     --eeg-cache-dir "${EEG_CACHE_DIR}" \
     --subjects ${SUBJECTS} \
     --epochs "${EPOCHS}" \
