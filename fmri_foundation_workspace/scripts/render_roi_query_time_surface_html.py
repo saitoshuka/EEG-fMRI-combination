@@ -180,7 +180,7 @@ def html_template(payload: dict[str, object], asset_prefix: str) -> str:
     #hud {{ position: fixed; left: 18px; top: 14px; max-width: min(620px, calc(100vw - 36px)); padding: 14px 16px; border: 1px solid rgba(255,255,255,.12); background: rgba(8,10,14,.78); backdrop-filter: blur(10px); border-radius: 10px; }}
     #title {{ font-size: 15px; font-weight: 700; margin-bottom: 4px; }}
     #subtitle {{ font-size: 12px; color: #b6bdc8; line-height: 1.35; }}
-    #controls {{ position: fixed; left: 18px; right: 18px; bottom: 16px; display: grid; grid-template-columns: auto auto auto 1fr auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid rgba(255,255,255,.12); background: rgba(8,10,14,.82); backdrop-filter: blur(10px); border-radius: 10px; }}
+    #controls {{ position: fixed; left: 18px; right: 18px; bottom: 16px; display: grid; grid-template-columns: auto auto auto auto 1fr auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid rgba(255,255,255,.12); background: rgba(8,10,14,.82); backdrop-filter: blur(10px); border-radius: 10px; }}
     button, select {{ background: #151922; color: #f1f3f5; border: 1px solid rgba(255,255,255,.15); border-radius: 7px; padding: 8px 10px; font-size: 13px; }}
     input[type=range] {{ width: 100%; }}
     #timeLabel {{ font-variant-numeric: tabular-nums; min-width: 92px; text-align: right; color: #f7d66b; }}
@@ -211,6 +211,11 @@ def html_template(payload: dict[str, object], asset_prefix: str) -> str:
       <option value="light">smooth light</option>
       <option value="strong">smooth strong</option>
       <option value="off">smooth off</option>
+    </select>
+    <select id="contrast">
+      <option value="high" selected>contrast high</option>
+      <option value="max">contrast max</option>
+      <option value="linear">contrast linear</option>
     </select>
     <input id="slider" type="range" min="0" max="9" value="0" step="0.02" />
     <div id="timeLabel">0-100 ms</div>
@@ -352,19 +357,37 @@ def html_template(payload: dict[str, object], asset_prefix: str) -> str:
       return String(start) + '-' + String(start + 100) + ' ms';
     }}
 
+    function mix3(a, b, t) {{
+      return [
+        a[0] * (1 - t) + b[0] * t,
+        a[1] * (1 - t) + b[1] * t,
+        a[2] * (1 - t) + b[2] * t
+      ];
+    }}
+
+    function contrastPower() {{
+      const mode = document.getElementById('contrast').value;
+      if (mode === 'max') return 0.34;
+      if (mode === 'linear') return 1.0;
+      return 0.52;
+    }}
+
     function colorKeep(v, vmax) {{
-      if (v === null || !Number.isFinite(v)) return [0.26, 0.27, 0.30];
+      if (v === null || !Number.isFinite(v)) return [0.10, 0.11, 0.13];
       const t = Math.max(-1, Math.min(1, v / vmax));
+      const a = Math.pow(Math.abs(t), contrastPower());
       if (t >= 0) {{
-        return [0.95 + 0.05*t, 0.94 - 0.54*t, 0.88 - 0.70*t];
+        if (a < 0.58) return mix3([0.20, 0.19, 0.22], [1.00, 0.72, 0.04], a / 0.58);
+        return mix3([1.00, 0.72, 0.04], [1.00, 0.05, 0.00], (a - 0.58) / 0.42);
       }}
-      const a = -t;
-      return [0.88 - 0.65*a, 0.92 - 0.52*a, 0.98 - 0.12*a];
+      if (a < 0.62) return mix3([0.20, 0.19, 0.22], [0.10, 0.63, 1.00], a / 0.62);
+      return mix3([0.10, 0.63, 1.00], [0.00, 1.00, 0.96], (a - 0.62) / 0.38);
     }}
     function colorDrop(v, vmax) {{
-      if (v === null || !Number.isFinite(v)) return [0.26, 0.27, 0.30];
-      const t = Math.max(0, Math.min(1, v / vmax));
-      return [0.20 + 0.80*t, 0.16 + 0.45*Math.sqrt(t), 0.22 - 0.10*t];
+      if (v === null || !Number.isFinite(v)) return [0.10, 0.11, 0.13];
+      const a = Math.pow(Math.max(0, Math.min(1, v / vmax)), contrastPower());
+      if (a < 0.52) return mix3([0.16, 0.03, 0.28], [0.95, 0.10, 0.42], a / 0.52);
+      return mix3([0.95, 0.10, 0.42], [1.00, 0.92, 0.08], (a - 0.52) / 0.48);
     }}
     function updateColors() {{
       const mode = document.getElementById('mode').value;
@@ -385,12 +408,13 @@ def html_template(payload: dict[str, object], asset_prefix: str) -> str:
       document.getElementById('minText').textContent = mode === 'keep' ? (-vmax).toFixed(2) : '0';
       document.getElementById('maxText').textContent = vmax.toFixed(2);
       document.getElementById('bar').style.background = mode === 'keep'
-        ? 'linear-gradient(90deg, #2b6cb0, #f4f4f5, #d9480f)'
-        : 'linear-gradient(90deg, #35283a, #b33f32, #ffd166)';
+        ? 'linear-gradient(90deg, #00fff5, #292933, #ffb800, #ff1600)'
+        : 'linear-gradient(90deg, #23083a, #ff1765, #ffe90d)';
     }}
     document.getElementById('slider').addEventListener('input', updateColors);
     document.getElementById('mode').addEventListener('change', updateColors);
     document.getElementById('smooth').addEventListener('change', updateColors);
+    document.getElementById('contrast').addEventListener('change', updateColors);
     let playing = false;
     let rafId = null;
     let playStartTime = 0;
