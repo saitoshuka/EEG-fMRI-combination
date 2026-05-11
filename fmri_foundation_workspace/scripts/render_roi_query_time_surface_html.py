@@ -11,7 +11,9 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import sys
+import urllib.request
 from pathlib import Path
 
 import numpy as np
@@ -32,6 +34,11 @@ from extract_visual_roi_targets_from_tribe import (  # noqa: E402
 DEFAULT_RESULTS = WORKSPACE / "results" / "eeg_image_bridge"
 DEFAULT_OUT_DIR = DEFAULT_RESULTS / "atm_roi_surface_time_maps"
 DEFAULT_NILEARN_DIR = WORKSPACE / "cache" / "nilearn"
+THREE_VERSION = "0.160.0"
+WEB_ASSETS = {
+    "three.module.js": f"https://unpkg.com/three@{THREE_VERSION}/build/three.module.js",
+    "OrbitControls.js": f"https://unpkg.com/three@{THREE_VERSION}/examples/jsm/controls/OrbitControls.js",
+}
 WINDOWS = [
     ("w000_100", "0-100 ms"),
     ("w100_200", "100-200 ms"),
@@ -146,7 +153,19 @@ def compact_float_list(values: np.ndarray, ndigits: int = 4) -> list[list[float]
     return np.round(values.astype("float32"), ndigits).tolist()
 
 
-def html_template(payload: dict[str, object]) -> str:
+def ensure_web_assets(out_root: Path) -> Path:
+    assets_dir = out_root / "web_assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    for filename, url in WEB_ASSETS.items():
+        path = assets_dir / filename
+        if path.exists() and path.stat().st_size > 1024:
+            continue
+        with urllib.request.urlopen(url, timeout=30) as response:
+            path.write_bytes(response.read())
+    return assets_dir
+
+
+def html_template(payload: dict[str, object], asset_prefix: str) -> str:
     payload_json = json.dumps(payload, separators=(",", ":"))
     return f"""<!doctype html>
 <html lang="en">
@@ -190,9 +209,16 @@ def html_template(payload: dict[str, object]) -> str:
     <input id="slider" type="range" min="0" max="9" value="0" step="1" />
     <div id="timeLabel">0-100 ms</div>
   </div>
+  <script type="importmap">
+    {{
+      "imports": {{
+        "three": "{asset_prefix}/three.module.js"
+      }}
+    }}
+  </script>
   <script type="module">
-    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
-    import {{ OrbitControls }} from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+    import * as THREE from 'three';
+    import {{ OrbitControls }} from '{asset_prefix}/OrbitControls.js';
 
     const payload = {payload_json};
     const canvas = document.getElementById('canvas');
@@ -343,8 +369,10 @@ def main() -> int:
     }
     out_dir = args.out_dir / args.tag / args.run_name
     out_dir.mkdir(parents=True, exist_ok=True)
+    assets_dir = ensure_web_assets(args.out_dir)
+    asset_prefix = Path(os.path.relpath(assets_dir, out_dir)).as_posix()
     out_path = out_dir / f"interactive_full_cortex_query_time_{args.surface}.html"
-    out_path.write_text(html_template(payload), encoding="utf-8")
+    out_path.write_text(html_template(payload, asset_prefix), encoding="utf-8")
     summary_path = out_dir / "interactive_summary.json"
     summary_path.write_text(
         json.dumps(
