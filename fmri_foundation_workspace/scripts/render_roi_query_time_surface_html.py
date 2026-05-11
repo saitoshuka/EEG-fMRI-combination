@@ -180,7 +180,7 @@ def html_template(payload: dict[str, object], asset_prefix: str) -> str:
     #hud {{ position: fixed; left: 18px; top: 14px; max-width: min(620px, calc(100vw - 36px)); padding: 14px 16px; border: 1px solid rgba(255,255,255,.12); background: rgba(8,10,14,.78); backdrop-filter: blur(10px); border-radius: 10px; }}
     #title {{ font-size: 15px; font-weight: 700; margin-bottom: 4px; }}
     #subtitle {{ font-size: 12px; color: #b6bdc8; line-height: 1.35; }}
-    #controls {{ position: fixed; left: 18px; right: 18px; bottom: 16px; display: grid; grid-template-columns: auto auto 1fr auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid rgba(255,255,255,.12); background: rgba(8,10,14,.82); backdrop-filter: blur(10px); border-radius: 10px; }}
+    #controls {{ position: fixed; left: 18px; right: 18px; bottom: 16px; display: grid; grid-template-columns: auto auto auto 1fr auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid rgba(255,255,255,.12); background: rgba(8,10,14,.82); backdrop-filter: blur(10px); border-radius: 10px; }}
     button, select {{ background: #151922; color: #f1f3f5; border: 1px solid rgba(255,255,255,.15); border-radius: 7px; padding: 8px 10px; font-size: 13px; }}
     input[type=range] {{ width: 100%; }}
     #timeLabel {{ font-variant-numeric: tabular-nums; min-width: 92px; text-align: right; color: #f7d66b; }}
@@ -206,7 +206,13 @@ def html_template(payload: dict[str, object], asset_prefix: str) -> str:
       <option value="keep">keep corr signal</option>
       <option value="drop">drop delta</option>
     </select>
-    <input id="slider" type="range" min="0" max="9" value="0" step="1" />
+    <select id="smooth">
+      <option value="medium" selected>smooth medium</option>
+      <option value="light">smooth light</option>
+      <option value="strong">smooth strong</option>
+      <option value="off">smooth off</option>
+    </select>
+    <input id="slider" type="range" min="0" max="9" value="0" step="0.02" />
     <div id="timeLabel">0-100 ms</div>
   </div>
   <script type="importmap">
@@ -223,7 +229,8 @@ def html_template(payload: dict[str, object], asset_prefix: str) -> str:
     const payload = {payload_json};
     const canvas = document.getElementById('canvas');
     const renderer = new THREE.WebGLRenderer({{ canvas, antialias: true }});
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.5));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x07080b);
     const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 1000);
@@ -243,7 +250,7 @@ def html_template(payload: dict[str, object], asset_prefix: str) -> str:
 
     const material = new THREE.MeshStandardMaterial({{
       vertexColors: true,
-      roughness: 0.92,
+      roughness: 0.86,
       metalness: 0.02,
       side: THREE.DoubleSide
     }});
@@ -257,9 +264,96 @@ def html_template(payload: dict[str, object], asset_prefix: str) -> str:
     const fill = new THREE.DirectionalLight(0x7fb3ff, 0.65);
     fill.position.set(-90, 80, 60);
     scene.add(fill);
+    const rim = new THREE.DirectionalLight(0xdfe9ff, 0.55);
+    rim.position.set(0, 160, 95);
+    scene.add(rim);
+
+    const vertexCount = payload.assignment.length;
+    const neighborSets = Array.from({{ length: vertexCount }}, () => new Set());
+    for (const face of payload.faces) {{
+      const a = face[0], b = face[1], c = face[2];
+      neighborSets[a].add(b); neighborSets[a].add(c);
+      neighborSets[b].add(a); neighborSets[b].add(c);
+      neighborSets[c].add(a); neighborSets[c].add(b);
+    }}
+    const neighbors = neighborSets.map((items) => Array.from(items));
+    const smoothLevels = {{ off: 0, light: 2, medium: 5, strong: 9 }};
+    const frameCache = new Map();
+
+    function isFiniteNumber(v) {{
+      return typeof v === 'number' && Number.isFinite(v);
+    }}
+
+    function buildBaseFrame(mode, windowIndex) {{
+      const roiValues = payload.values[mode][windowIndex];
+      const out = new Float32Array(vertexCount);
+      out.fill(Number.NaN);
+      for (let i = 0; i < vertexCount; i++) {{
+        const roi = payload.assignment[i];
+        const value = roi >= 0 ? roiValues[roi] : null;
+        if (isFiniteNumber(value)) out[i] = value;
+      }}
+      return out;
+    }}
+
+    function smoothFrame(values, iterations) {{
+      if (iterations <= 0) return values;
+      let current = values;
+      for (let step = 0; step < iterations; step++) {{
+        const next = new Float32Array(vertexCount);
+        next.fill(Number.NaN);
+        for (let i = 0; i < vertexCount; i++) {{
+          const v = current[i];
+          if (!Number.isFinite(v)) continue;
+          let sum = v;
+          let count = 1;
+          for (const j of neighbors[i]) {{
+            const nv = current[j];
+            if (Number.isFinite(nv)) {{
+              sum += nv;
+              count += 1;
+            }}
+          }}
+          const avg = sum / count;
+          next[i] = v * 0.34 + avg * 0.66;
+        }}
+        current = next;
+      }}
+      return current;
+    }}
+
+    function cachedFrame(mode, smoothName, windowIndex) {{
+      const key = mode + '|' + smoothName + '|' + windowIndex;
+      if (!frameCache.has(key)) {{
+        frameCache.set(key, smoothFrame(buildBaseFrame(mode, windowIndex), smoothLevels[smoothName] ?? 0));
+      }}
+      return frameCache.get(key);
+    }}
+
+    function interpolatedFrame(mode, smoothName, t) {{
+      const lo = Math.max(0, Math.min(payload.windows.length - 1, Math.floor(t)));
+      const hi = Math.max(0, Math.min(payload.windows.length - 1, Math.ceil(t)));
+      const frac = Math.max(0, Math.min(1, t - lo));
+      const a = cachedFrame(mode, smoothName, lo);
+      const b = cachedFrame(mode, smoothName, hi);
+      const out = new Float32Array(vertexCount);
+      out.fill(Number.NaN);
+      for (let i = 0; i < vertexCount; i++) {{
+        const av = a[i], bv = b[i];
+        if (Number.isFinite(av) && Number.isFinite(bv)) out[i] = av * (1 - frac) + bv * frac;
+        else if (Number.isFinite(av)) out[i] = av;
+        else if (Number.isFinite(bv)) out[i] = bv;
+      }}
+      return out;
+    }}
+
+    function timeText(t) {{
+      const start = Math.round(t * 100);
+      return String(start) + '-' + String(start + 100) + ' ms';
+    }}
 
     function colorKeep(v, vmax) {{
-      if (v === null || Number.isNaN(v)) return [0.26, 0.27, 0.30];
+      if (v === null || !Number.isFinite(v)) return [0.26, 0.27, 0.30];
       const t = Math.max(-1, Math.min(1, v / vmax));
       if (t >= 0) {{
         return [0.95 + 0.05*t, 0.94 - 0.54*t, 0.88 - 0.70*t];
@@ -268,26 +362,26 @@ def html_template(payload: dict[str, object], asset_prefix: str) -> str:
       return [0.88 - 0.65*a, 0.92 - 0.52*a, 0.98 - 0.12*a];
     }}
     function colorDrop(v, vmax) {{
-      if (v === null || Number.isNaN(v)) return [0.26, 0.27, 0.30];
+      if (v === null || !Number.isFinite(v)) return [0.26, 0.27, 0.30];
       const t = Math.max(0, Math.min(1, v / vmax));
       return [0.20 + 0.80*t, 0.16 + 0.45*Math.sqrt(t), 0.22 - 0.10*t];
     }}
     function updateColors() {{
       const mode = document.getElementById('mode').value;
-      const w = Number(document.getElementById('slider').value);
-      const values = payload.values[mode][w];
+      const smoothName = document.getElementById('smooth').value;
+      const t = Number(document.getElementById('slider').value);
+      const values = interpolatedFrame(mode, smoothName, t);
       const vmax = payload.vmax[mode];
       const colorFn = mode === 'keep' ? colorKeep : colorDrop;
-      const assignment = payload.assignment;
-      for (let i = 0; i < assignment.length; i++) {{
-        const roi = assignment[i];
-        const value = roi >= 0 ? values[roi] : null;
+      for (let i = 0; i < vertexCount; i++) {{
+        const value = values[i];
         const c = colorFn(value, vmax);
         colors[i*3] = c[0]; colors[i*3+1] = c[1]; colors[i*3+2] = c[2];
       }}
       geometry.attributes.color.needsUpdate = true;
-      document.getElementById('timeLabel').textContent = payload.windows[w][1];
-      document.getElementById('subtitle').textContent = payload.run_name + ' | ' + mode + ' | ' + payload.windows[w][1] + ' | non-target cortex shown in gray';
+      const label = timeText(t);
+      document.getElementById('timeLabel').textContent = label;
+      document.getElementById('subtitle').textContent = payload.run_name + ' | ' + mode + ' | ' + label + ' | visual interpolation only, non-target cortex gray';
       document.getElementById('minText').textContent = mode === 'keep' ? (-vmax).toFixed(2) : '0';
       document.getElementById('maxText').textContent = vmax.toFixed(2);
       document.getElementById('bar').style.background = mode === 'keep'
@@ -296,19 +390,35 @@ def html_template(payload: dict[str, object], asset_prefix: str) -> str:
     }}
     document.getElementById('slider').addEventListener('input', updateColors);
     document.getElementById('mode').addEventListener('change', updateColors);
+    document.getElementById('smooth').addEventListener('change', updateColors);
     let playing = false;
-    let timer = null;
+    let rafId = null;
+    let playStartTime = 0;
+    let playStartValue = 0;
+    const maxWindow = payload.windows.length - 1;
+    const playSpeedWindowsPerSecond = 1.25;
+    function tick(now) {{
+      if (!playing) return;
+      if (!playStartTime) playStartTime = now;
+      let next = playStartValue + ((now - playStartTime) / 1000) * playSpeedWindowsPerSecond;
+      if (next > maxWindow) {{
+        playStartTime = now;
+        playStartValue = 0;
+        next = 0;
+      }}
+      document.getElementById('slider').value = next.toFixed(2);
+      updateColors();
+      rafId = requestAnimationFrame(tick);
+    }}
     document.getElementById('play').addEventListener('click', () => {{
       playing = !playing;
       document.getElementById('play').textContent = playing ? 'Pause' : 'Play';
       if (playing) {{
-        timer = setInterval(() => {{
-          const s = document.getElementById('slider');
-          s.value = (Number(s.value) + 1) % payload.windows.length;
-          updateColors();
-        }}, 750);
+        playStartTime = 0;
+        playStartValue = Number(document.getElementById('slider').value);
+        rafId = requestAnimationFrame(tick);
       }} else {{
-        clearInterval(timer);
+        if (rafId !== null) cancelAnimationFrame(rafId);
       }}
     }});
 
