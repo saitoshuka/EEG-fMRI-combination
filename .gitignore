@@ -7,6 +7,7 @@ __pycache__/
 .ruff_cache/
 
 # Third-party model repositories cloned locally.
+Auto-claude-code-research-in-sleep/
 external/LaBraM/
 external/NeuroSTORM/
 external/tribev2/
@@ -22,6 +23,7 @@ fmri_foundation_workspace/data/
 fmri_foundation_workspace/results/
 fmri_foundation_workspace/notes/**/*.html
 fmri_foundation_workspace/notes/**/*.txt
+fmri_foundation_workspace/notes/*.zip
 !fmri_foundation_workspace/data/.gitkeep
 !fmri_foundation_workspace/results/.gitkeep
 
@@ -63,6 +65,7 @@ results/**/pid
 results/**/run.log
 
 # Local generated helper artifacts from large paired-data downloads.
+EEG-fMRI paired data.md
 downloads/README.md
 downloads/aws_config
 NAT_VIEW_download_links.sh
