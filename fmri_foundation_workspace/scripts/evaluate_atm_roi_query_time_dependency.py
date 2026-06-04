@@ -91,6 +91,7 @@ def build_model(summary: dict, roi_payload: dict[str, object], device: torch.dev
         atm_d_ff=int(summary.get("atm_d_ff", 256)),
         semantic_head=summary.get("semantic_head", "shallow"),
         use_spatial=True,
+        spatial_head=summary.get("spatial_head", "query"),
     ).to(device)
     return model
 

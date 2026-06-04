@@ -83,6 +83,7 @@ def main() -> None:
         atm_d_ff=int(summary.get("atm_d_ff", 256)),
         semantic_head=str(summary.get("semantic_head", "shallow")),
         use_spatial=str(summary.get("mode", "spatial")) == "spatial",
+        spatial_head=str(summary.get("spatial_head", "query")),
     ).to(device)
     checkpoint_path = args.model_dir / args.checkpoint
     state = torch.load(checkpoint_path, map_location=device, weights_only=False)
