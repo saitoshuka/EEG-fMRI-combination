@@ -113,6 +113,17 @@ def parse_sizes(value: str) -> list[int]:
     return [int(part.strip()) for part in value.split(",") if part.strip()]
 
 
+def load_target_array(payload: np.lib.npyio.NpzFile, key: str) -> np.ndarray:
+    if key == "auto":
+        if "targets" in payload.files:
+            key = "targets"
+        elif "parcel_targets" in payload.files:
+            key = "parcel_targets"
+        else:
+            raise KeyError(f"No targets or parcel_targets key found in {payload.files}")
+    return payload[key].astype(np.float32)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--asset-root", type=Path, default=DEFAULT_ROOT)
@@ -120,6 +131,7 @@ def main() -> int:
     parser.add_argument("--test-targets", type=Path, default=DEFAULT_TEST_TARGETS)
     parser.add_argument("--sizes", default="32,64,128,256")
     parser.add_argument("--components", type=int, default=32)
+    parser.add_argument("--target-key", default="auto")
     parser.add_argument("--alpha", type=float, default=100.0)
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     parser.add_argument("--note", type=Path, default=DEFAULT_NOTE)
@@ -127,9 +139,9 @@ def main() -> int:
 
     train_npz = np.load(args.train_targets)
     test_npz = np.load(args.test_targets)
-    y_train_all = train_npz["targets"].astype(np.float32)
+    y_train_all = load_target_array(train_npz, args.target_key)
     train_image_index = train_npz["image_index"].astype(int)
-    y_test = test_npz["targets"].astype(np.float32)
+    y_test = load_target_array(test_npz, args.target_key)
     test_image_index = test_npz["image_index"].astype(int)
     subjects = load_subjects(args.asset_root)
     eeg_train_all = load_eeg_train(args.asset_root, subjects, train_image_index)
