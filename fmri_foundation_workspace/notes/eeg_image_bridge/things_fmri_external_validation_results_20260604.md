@@ -318,6 +318,30 @@ improvement. To make spatial knowledge itself a main claim, the next target
 should be finer-grained cortical prototypes or surface parcels rather than only
 38 ROI averages.
 
+### Fine Proto256 Residual Query-vs-Pooled Check
+
+This check moves beyond 38/64 ROI averages to 256 spatial prototypes built from
+TRIBE visual-surface predictions. The target is stricter than raw TRIBE because
+the part predictable from CLIP ViT-H/14 + V-JEPA2 features is removed first.
+
+| head | target | best_epoch | best_roi_rank | best_shifted | best_delta | best_roi_top5 | final_roi_rank | final_clip_top1 | final_clip_top5 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ordered query | CLIP+V-JEPA residual proto256 | 25 | 0.6020 | 0.5014 | 0.1005 | 0.0400 | 0.6020 | 0.4250 | 0.8150 |
+| pooled no-query | CLIP+V-JEPA residual proto256 | 21 | 0.6515 | 0.4986 | 0.1529 | 0.0800 | 0.6483 | 0.4150 | 0.7600 |
+
+#### Proto256 Query-Identity Diagnostics
+
+| head | diag_corr | offdiag_corr | diag_offdiag | shuffle_diag_offdiag | diag_rank_pct | target_geometry_corr |
+| --- | --- | --- | --- | --- | --- | --- |
+| ordered query | 0.0199 | 0.0031 | 0.0168 | -0.0005 | 0.5720 | 0.0439 |
+| pooled no-query | 0.0138 | 0.0032 | 0.0106 | -0.0003 | 0.5329 | -0.0143 |
+
+Interpretation: the fine residual proto256 target is learnable from EEG, but
+the pooled no-query head is the scalar-rank winner. Ordered query preserves
+stronger fixed-prototype identity and target-geometry structure, so query is
+still best framed as a spatially interpretable output mechanism rather than a
+prediction-accuracy improvement.
+
 ## Current Interpretation
 
 1. The full-surface TRIBE teacher aligns strongly with real THINGS-fMRI on same-image heldout tests after train-only calibration, especially in visual ROI families. This supports using TRIBE as a pseudo-cortical teacher, while still requiring cautious language because the evaluation uses a learned calibration into THINGS-fMRI ROI space.
@@ -331,4 +355,5 @@ should be finer-grained cortical prototypes or surface parcels rather than only
 9. In raw-ridge image retrieval, V-JEPA2 and CLIP+V-JEPA2 are stronger semantic target spaces than CLIP alone on the overlap split. This should remain a diagnostic target-space result, not the main architecture baseline.
 10. In the ATM-aligned retrieval check, TRIBE cortical reranking improves the frozen ATM baseline on the 200-image test set, with shifted/permutation-null reranking clearly lower. Test-split CV shows a consistent small heldout trend, but the train-image validation route is invalid because training-image retrieval is nearly saturated and selects no rerank. This keeps the rerank result promising but not final.
 11. The ROI-query constraint is competitive with no-query pooled ROI heads. Pooled tends to be strong on scalar ROI rank, while query provides fixed ROI identity and query-specific interpretation. Therefore same-seed retrieval versus semantic-only ATM and direct real-fMRI visual64 correlation should be treated as primary checks; 38-ROI rank alone is auxiliary.
-12. For an AAAI-level story, the current strongest direction is to stabilize direct real-fMRI visual targets, add query-time/channel/cortical interpretability on the real visual64 target, and then scale to calibrated TRIBE/surface-prototype targets for larger image budgets.
+12. Fine residual proto256 targets are learnable from EEG and outperform shifted-null, showing that spatial supervision can move beyond 38/64 ROI averages. But pooled prediction beats ordered query on scalar rank, while ordered query has stronger fixed-prototype identity. This keeps query as an interpretability mechanism unless a prototype-aware query architecture closes the performance gap.
+13. For an AAAI-level story, the current strongest direction is to stabilize direct real-fMRI visual targets, add query-time/channel/cortical interpretability on the real visual64/proto256 targets, and then redesign ordered queries with coordinate/locality constraints rather than simply sweeping losses.

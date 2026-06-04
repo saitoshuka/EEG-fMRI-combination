@@ -215,6 +215,26 @@ Relevant files:
 - `fmri_foundation_workspace/scripts/render_roi_query_time_surface_html.py`
 - `fmri_foundation_workspace/results/eeg_image_bridge/atm_roi_surface_time_maps/roi_query_time_surface_demo_report.md`
 
+### 6. Fine visual-surface prototype check
+
+To address whether 38/64 ROI averages are too coarse to demonstrate spatial
+knowledge, the latest check uses 256 TRIBE visual-surface spatial prototypes
+after removing the part predictable from CLIP ViT-H/14 + V-JEPA2.
+
+| head | target | best ROI rank | shifted | final CLIP top1 | final CLIP top5 | identity diag-offdiag |
+|---|---|---:|---:|---:|---:|---:|
+| ordered query | residual proto256 | 0.6020 | 0.5014 | 0.425 | 0.815 | 0.0168 |
+| pooled no-query | residual proto256 | 0.6515 | 0.5031 | 0.415 | 0.760 | 0.0106 |
+
+Interpretation: finer residual cortical prototypes are learnable from EEG, but
+pooled prediction still wins scalar ROI rank. Ordered query remains stronger as
+a fixed-prototype identity and visualization mechanism, not yet as a
+performance-improving head.
+
+Relevant file:
+
+- `fmri_foundation_workspace/notes/eeg_image_bridge/atm_proto256_residual_query_vs_pooled_20260605.md`
+
 ## Reproducibility Notes
 
 The local environment was managed with conda. The core EEG environment was
@@ -255,7 +275,7 @@ Do not claim yet:
 
 Next evidence needed:
 
-- finer visual surface/prototype targets with matched query-vs-pooled controls;
+- prototype-aware query architectures with coordinate/locality constraints;
 - validation-selected checkpoints rather than test-selected best checkpoints;
 - subject-heldout and cross-dataset tests for robustness;
 - generation-side comparison against the original image reconstruction model.

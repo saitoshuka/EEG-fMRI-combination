@@ -151,3 +151,12 @@ Updated interpretation:
 - The shared207 result should not be presented as whole-brain decoding. It is a useful negative/positive split: visual ROIs are positive, nonvisual/uncurated ROIs are near chance.
 - The query branch still should not be sold as a scalar-rank winner, because pooled visual64 rank is higher. Its value is fixed ROI identity, spatial interpretability, and a route to finer-resolution cortical prototypes.
 - For AAAI, the next decision-value experiment is finer than 64 visual ROIs: build visual cortex surface/prototype targets with a matched pooled control and ask whether query identity and retrieval/correlation scale beyond coarse ROI averages.
+
+Follow-up result: the first fine-target check used CLIP+V-JEPA2-residual
+TRIBE visual-surface proto256 targets. Both heads beat shifted null, so the
+fine residual pseudo-cortical target is learnable from EEG. Pooled no-query
+rank is stronger (0.6515 vs shifted 0.5031) than ordered query rank (0.6020 vs
+shifted 0.5014), but ordered query has stronger prototype-identity structure
+(diag-offdiag 0.0168 vs 0.0106; target-geometry corr 0.0439 vs -0.0143).
+This further supports the boundary that ordered queries are currently an
+interpretability/identity mechanism, not a scalar-rank improvement mechanism.
