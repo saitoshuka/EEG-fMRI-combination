@@ -249,13 +249,16 @@ after removing the part predictable from CLIP ViT-H/14 + V-JEPA2.
 | ordered query | residual proto256 | 0.6020 | 0.5014 | 0.425 | 0.815 | 0.0168 |
 | pooled no-query | residual proto256 | 0.6515 | 0.5031 | 0.415 | 0.760 | 0.0106 |
 | coordinate-only query | residual proto256 | 0.5814 | 0.5029 | 0.390 | 0.760 | 0.0091 |
+| group+coordinate query | residual proto256 | 0.5909 | 0.5108 | 0.415 | 0.775 | 0.0182 |
 
 Interpretation: finer residual cortical prototypes are learnable from EEG, but
-pooled prediction still wins scalar ROI rank. Ordered query remains stronger as
-a fixed-prototype identity and visualization mechanism, not yet as a
+pooled prediction still wins scalar ROI rank. Ordered query remains useful as a
+fixed-prototype identity and visualization mechanism, not yet as a
 performance-improving head. Coordinate-only query is a negative control: adding
 fsaverage5 centroid coordinates without the original target/group identity hints
-weakens both rank and query identity.
+weakens both rank and query identity. Group+coordinate query recovers and
+slightly improves query identity/target-geometry structure, but still does not
+close the pooled-rank gap.
 
 Relevant file:
 

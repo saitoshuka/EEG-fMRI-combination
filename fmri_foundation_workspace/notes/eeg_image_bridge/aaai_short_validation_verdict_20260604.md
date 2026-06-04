@@ -138,21 +138,25 @@ k256 cortical-prototype target.
 |---|---:|---:|---:|---:|---:|
 | ordered query | 0.6020 | 0.5014 | 0.425 | 0.815 | 0.0168 |
 | pooled no-query | 0.6515 | 0.5031 | 0.415 | 0.760 | 0.0106 |
+| coordinate-only query | 0.5814 | 0.5029 | 0.390 | 0.760 | 0.0091 |
+| group+coordinate query | 0.5909 | 0.5108 | 0.415 | 0.775 | 0.0182 |
 
 Interpretation:
 
 - Finer residual cortical prototypes are learnable from EEG.
 - The original ordered query constraint is not yet a performance-improving head
   for k256; pooled no-query wins ROI rank.
-- Ordered query retains stronger fixed-prototype identity and target-geometry
-  structure, so it remains useful for interpretability.
-- A coordinate-aware query run is now the highest-value next experiment because
-  it tests whether explicit cortical geometry can close the performance gap
-  while preserving identity binding.
+- Ordered query variants retain stronger fixed-prototype identity and
+  target-geometry structure, so they remain useful for interpretability.
+- Coordinate-only query is a negative control. Group+coordinate query improves
+  identity/geometry over the original query but does not close the pooled-rank
+  gap. The next architectural test should therefore add explicit locality or
+  hierarchy, not just concatenate more ROI features.
 
 Relevant file:
 
 - `fmri_foundation_workspace/notes/eeg_image_bridge/atm_proto256_residual_query_vs_pooled_20260605.md`
+- `fmri_foundation_workspace/notes/eeg_image_bridge/atm_proto256_coordinate_query_20260605.md`
 
 ## Updated AAAI Gate
 

@@ -38,6 +38,7 @@ where centroid metadata comes from
 | original ordered query | group/one-hot | 0.6020 | 0.5014 | 0.1005 | 0.425 | 0.815 | 0.0168 | 0.0439 |
 | pooled no-query | none | 0.6515 | 0.5031 | 0.1484 | 0.415 | 0.760 | 0.0106 | -0.0143 |
 | coordinate-only query | centroid only | 0.5814 | 0.5029 | 0.0784 | 0.390 | 0.760 | 0.0091 | 0.0124 |
+| group+coordinate query | group/one-hot + centroid | 0.5909 | 0.5108 | 0.0800 | 0.415 | 0.775 | 0.0182 | 0.0843 |
 
 ## Interpretation
 
@@ -46,21 +47,30 @@ still learns the residual proto256 target, but it does not improve over the
 original ordered query. It also weakens query-target identity and
 target-geometry preservation.
 
-This suggests that explicit cortical coordinates are not sufficient by
-themselves. The model likely still needs semantic/ROI-group identity hints, or a
-stronger locality-aware inductive bias. A `group_coord` run has therefore been
-started: it concatenates the original query features with fsaverage5 centroid
-features.
+The `group_coord` run is more informative. Adding centroid features on top of
+the original group/identity features improves query-target identity slightly
+over the original ordered query and gives the strongest target-geometry
+preservation in this proto256 set. It still does not recover scalar ROI rank:
+original query is 0.6020, group+coord is 0.5909, and pooled remains 0.6515.
+
+This suggests that explicit cortical coordinates are useful only when combined
+with target identity hints, and even then they mainly improve the structure of
+the query binding rather than raw prediction performance. A stronger
+locality-aware or hierarchical inductive bias is needed if the query branch is
+to become a scalar-rank winner.
 
 ## Decision
 
-Do not claim that "adding coordinates improves spatial distillation" from the
-coordinate-only run. The useful claim is narrower:
+Do not claim that "adding coordinates improves spatial distillation" in the
+performance sense. The useful claim is narrower:
 
-> Pure coordinate priors are insufficient; spatial coordinates need to be
-> combined with target identity/group structure or locality regularization.
+> Pure coordinate priors are insufficient. Group+coordinate priors improve
+> query-target identity and target-geometry preservation, but do not solve the
+> pooled-vs-query rank gap.
 
-The next decision depends on the queued `group_coord` result.
+The next decision should not be another loss sweep. Either use pooled heads for
+performance and query heads for interpretation, or redesign the query branch
+with explicit neighborhood/locality constraints.
 
 ## Artifacts
 
@@ -68,5 +78,9 @@ The next decision depends on the queued `group_coord` result.
   `fmri_foundation_workspace/results/eeg_image_bridge/atm_proto256_spatial_branch/atm_query_proto256_residual_coord_seed33_n16540_d256_none_lam005_col00_sp005`
 - Coord identity:
   `fmri_foundation_workspace/results/eeg_image_bridge/atm_roi_query_target_confusion/proto256_residual_coord_identity_n16540`
-- Group+coord queued/running log:
+- Group+coord run:
+  `fmri_foundation_workspace/results/eeg_image_bridge/atm_proto256_spatial_branch/atm_query_proto256_residual_groupcoord_seed33_n16540_d256_none_lam005_col00_sp005`
+- Group+coord identity:
+  `fmri_foundation_workspace/results/eeg_image_bridge/atm_roi_query_target_confusion/proto256_residual_groupcoord_identity_n16540`
+- Group+coord log:
   `fmri_foundation_workspace/results/eeg_image_bridge/logs/atm_query_proto256_residual_groupcoord_seed33_n16540_d256_none_lam005_col00_sp005.log`

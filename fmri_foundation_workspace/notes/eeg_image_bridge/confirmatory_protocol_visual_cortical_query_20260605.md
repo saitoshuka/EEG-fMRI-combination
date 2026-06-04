@@ -153,7 +153,10 @@ As of 2026-06-05:
   ROI rank.
 - H3 is supported in the ordered-query real visual64 analysis.
 - H4 is supported as a secondary attribution pattern.
-- H5 is not supported by coordinate-only query: proto256 residual rank is
-  0.5814 vs original query 0.6020, and identity/geometry are also weaker. The
-  more relevant `group_coord` test is now running because it keeps target
-  identity/group hints while adding fsaverage5 centroid coordinates.
+- H5 is only partially supported. Coordinate-only query is negative:
+  proto256 residual rank is 0.5814 vs original query 0.6020, and
+  identity/geometry are weaker. Group+coordinate query is better structured:
+  rank 0.5909, identity diag-offdiag 0.0182, target-geometry corr 0.0843.
+  This supports coordinates as a structural prior, not as a scalar-rank
+  improvement. The next query architecture should add explicit locality or
+  hierarchy rather than continuing simple feature concatenation.
