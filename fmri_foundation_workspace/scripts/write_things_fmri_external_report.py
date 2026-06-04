@@ -117,6 +117,9 @@ def main() -> None:
     atm_rerank_testsplit_cv_path = (
         args.external_dir.parent / "atm_tribe_rerank_n16540_testsplit_cv" / "summary.json"
     )
+    atm_real_fmri_visual64_eval_path = (
+        args.external_dir / "atm_real_fmri_visual64_eval" / "summary.json"
+    )
 
     key_family = family_eval[
         family_eval["label"].isin(FAMILY_LABELS) & family_eval["family"].isin(FAMILIES)
@@ -434,6 +437,46 @@ def main() -> None:
                 "shuffle_rank",
             ],
         )
+    atm_real_visual64_text = "Not run yet."
+    if atm_real_fmri_visual64_eval_path.exists():
+        payload = json.loads(atm_real_fmri_visual64_eval_path.read_text())
+        rows = []
+        for row in payload["rows"]:
+            if row["checkpoint"] != "model_best_roi_rank.pt":
+                continue
+            rows.append(
+                {
+                    "head": row["spatial_head"],
+                    "n_test": row["n_test"],
+                    "n_roi": row["n_roi"],
+                    "rank": row["rank_percentile"],
+                    "shifted": row["shifted_rank_percentile"],
+                    "delta": row["rank_delta"],
+                    "top1": row["top1"],
+                    "top5": row["top5"],
+                    "image_corr": row["image_pattern_corr_mean"],
+                    "roi_corr": row["roi_corr_fisher_mean"],
+                }
+            )
+        atm_real_visual64_text = (
+            markdown_table(
+                pd.DataFrame(rows),
+                [
+                    "head",
+                    "n_test",
+                    "n_roi",
+                    "rank",
+                    "shifted",
+                    "delta",
+                    "top1",
+                    "top5",
+                    "image_corr",
+                    "roi_corr",
+                ],
+            )
+            if rows
+            else "Not run yet."
+        )
     retrieval_rows = []
     for dirname, label in [
         ("eeg_clip_retrieval_cortical_rerank", "CLIP ViT-H/14"),
@@ -646,9 +689,37 @@ def main() -> None:
         ]
         if row is not None
     ]
+    def collect_seed_row(seed: str, head: str, dirname: str) -> dict[str, object] | None:
+        path = args.external_dir.parent / "atm_roi_spatial_branch" / dirname / "summary.json"
+        if not path.exists():
+            return None
+        payload = json.loads(path.read_text())
+        rows = payload["rows"]
+        out: dict[str, object] = {
+            "seed": seed,
+            "head": head,
+            "best_clip_top1": max(row["clip_top1"] for row in rows),
+            "final_clip_top1": rows[-1]["clip_top1"],
+            "best_clip_top5": max(row["clip_top5"] for row in rows),
+            "final_clip_top5": rows[-1]["clip_top5"],
+            "best_clip_rank": max(row["clip_rank_percentile"] for row in rows),
+            "final_clip_rank": rows[-1]["clip_rank_percentile"],
+            "best_roi_rank": np.nan,
+            "final_roi_rank": np.nan,
+        }
+        roi_vals = [row["roi_rank_percentile"] for row in rows if "roi_rank_percentile" in row]
+        if roi_vals:
+            out["best_roi_rank"] = max(roi_vals)
+            out["final_roi_rank"] = roi_vals[-1]
+        return out
+
     query_seed_rows = []
-    for seed in ["33", "11"]:
+    for seed in ["33", "11", "77"]:
         for head, dirname in [
+            (
+                "semantic",
+                f"atm_semantic_group_train_seed{seed}_budget16540_n16540_d256_none_seed{seed}",
+            ),
             (
                 "query",
                 f"atm_spatial_parcel_raw_strongroi_train_seed{seed}_budget16540_n16540_d256_none_lam010_col001_sp010",
@@ -658,22 +729,35 @@ def main() -> None:
                 f"atm_spatial_pooled_parcel_raw_strongroi_train_seed{seed}_budget16540_n16540_d256_none_lam010_col001_sp010",
             ),
         ]:
-            path = args.external_dir.parent / "atm_roi_spatial_branch" / dirname / "summary.json"
-            if not path.exists():
+            row = collect_seed_row(seed, head, dirname)
+            if row is not None:
+                query_seed_rows.append(row)
+    same_seed_gain_rows = []
+    if query_seed_rows:
+        by_seed_head = {
+            (str(row["seed"]), str(row["head"])): row for row in query_seed_rows
+        }
+        for seed in ["33", "11", "77"]:
+            semantic = by_seed_head.get((seed, "semantic"))
+            if semantic is None:
                 continue
-            payload = json.loads(path.read_text())
-            rows = payload["rows"]
-            out = {
-                "seed": seed,
-                "head": head,
-                "best_clip_top1": max(row["clip_top1"] for row in rows),
-                "final_clip_top1": rows[-1]["clip_top1"],
-                "best_clip_top5": max(row["clip_top5"] for row in rows),
-                "final_clip_top5": rows[-1]["clip_top5"],
-                "best_roi_rank": max(row["roi_rank_percentile"] for row in rows),
-                "final_roi_rank": rows[-1]["roi_rank_percentile"],
-            }
-            query_seed_rows.append(out)
+            for head in ["query", "pooled"]:
+                row = by_seed_head.get((seed, head))
+                if row is None:
+                    continue
+                same_seed_gain_rows.append(
+                    {
+                        "seed": seed,
+                        "head": head,
+                        "best_top1_gain_vs_semantic": row["best_clip_top1"]
+                        - semantic["best_clip_top1"],
+                        "best_top5_gain_vs_semantic": row["best_clip_top5"]
+                        - semantic["best_clip_top5"],
+                        "best_rank_gain_vs_semantic": row["best_clip_rank"]
+                        - semantic["best_clip_rank"],
+                        "best_roi_rank": row["best_roi_rank"],
+                    }
+                )
     query_seed_text = (
         markdown_table(
             pd.DataFrame(query_seed_rows),
@@ -684,12 +768,29 @@ def main() -> None:
                 "final_clip_top1",
                 "best_clip_top5",
                 "final_clip_top5",
+                "best_clip_rank",
+                "final_clip_rank",
                 "best_roi_rank",
                 "final_roi_rank",
             ],
         )
         if query_seed_rows
         else "Not run yet."
+    )
+    same_seed_gain_text = (
+        markdown_table(
+            pd.DataFrame(same_seed_gain_rows),
+            [
+                "seed",
+                "head",
+                "best_top1_gain_vs_semantic",
+                "best_top5_gain_vs_semantic",
+                "best_rank_gain_vs_semantic",
+                "best_roi_rank",
+            ],
+        )
+        if same_seed_gain_rows
+        else "Waiting for semantic-only seed summaries."
     )
     query_control_text = (
         markdown_table(
@@ -722,6 +823,10 @@ def main() -> None:
 - Train overlap: {overlap['n_strict_train']}; heldout THINGS-EEG test overlap: {overlap['n_strict_test']}.
 - Real fMRI target: subject-averaged ROI beta matrix, {roi_summary['n_images']} images x {len(roi_summary['roi_names'])} shared binary ROI mask columns.
 - fMRI subjects: {', '.join(subject['subject'] for subject in roi_summary['subjects'])}.
+
+Note: `ROI207` below is only shorthand for the 207 shared binary ROI mask
+columns found in the ds004192 ICA-beta voxel metadata across the available
+subjects. It is not a separate official THINGS-fMRI atlas name.
 
 ## Overall Heldout Test Results
 
@@ -785,6 +890,27 @@ tokens.
 
 {trainable_multiseed_text}
 
+### ATM Direct Real-fMRI Visual64 Supervision
+
+This is the cleanest direct EEG-to-real-fMRI gate so far. Targets are the
+`all_visual_curated` subset of shared THINGS-fMRI binary ROI columns: 64 visual
+ROI columns selected from the 207 shared metadata-derived ROI columns using the
+curated early/mid/ventral visual sets in
+`analyze_things_fmri_external_roi_breakdown.py`. Training uses the 6330
+THINGS-EEG/THINGS-fMRI train-overlap images; evaluation uses the 77 exact
+THINGS-EEG test images that overlap THINGS-fMRI. No TRIBE target is used in
+this run.
+
+{atm_real_visual64_text}
+
+Interpretation: direct real-fMRI visual ROI supervision gives a clear
+above-shifted alignment signal. The pooled no-query head has higher image-level
+ROI retrieval rank, while the ordered-query head has higher ROI-wise correlation
+in the best checkpoint. Therefore the performance claim should be "EEG can
+predict real visual-fMRI ROI patterns"; the ordered-query claim should be framed
+as fixed ROI identity and interpretability unless later finer-resolution query
+targets outperform pooled controls.
+
 ### Image Retrieval With Cortical Reranking
 
 The following retrieval table is a raw-ridge diagnostic, not the final ATM
@@ -830,12 +956,19 @@ future validation-selected runs show a consistent performance advantage.
 
 {query_seed_text}
 
-Interpretation: across the two checked seeds, query and pooled heads are very
-close. Seed 33 favors pooled slightly on ROI rank but query on CLIP retrieval;
-seed 11 favors query slightly on both. This supports the conservative claim that
-ordered queries are competitive and interpretability-preserving, but it is not
-yet enough to claim a robust scalar-performance advantage over pooled ROI
-prediction.
+#### Same-Seed Retrieval Gain Over Semantic-Only ATM
+
+{same_seed_gain_text}
+
+Interpretation: across the checked seeds, query and pooled heads are very close.
+Pooled often has a slight edge on the low-dimensional 38-ROI rank. The primary
+performance-facing metric is now same-seed CLIP retrieval against the
+semantic-only ATM baseline, not query-vs-pooled ROI rank alone. If the semantic
+baseline matches or exceeds the ROI-supervised heads, the query branch should be
+claimed as a structured interpretability mechanism rather than a performance
+improvement. To make spatial knowledge itself a main claim, the next target
+should be finer-grained cortical prototypes or surface parcels rather than only
+38 ROI averages.
 
 ## Current Interpretation
 
@@ -843,13 +976,14 @@ prediction.
 2. The raw TRIBE/parcel38 teacher also aligns strongly with real THINGS-fMRI on heldout exact images. It is stronger than direct V-JEPA2 and slightly stronger than CLIP in rank, although CLIP has stronger top5 and ROI-wise correlation in some views.
 3. The signal is concentrated in curated visual ROIs. Nonvisual/uncurated ROI performance is weak, which supports a stimulus-visual interpretation rather than a global artifact.
 4. CLIP-residual teacher signal is not robust in all ROI207, but shows visual-family structure. This means residual claims should be phrased narrowly and validated by ROI family, not by all-ROI averages.
-5. EEG-predicted ROI outputs from the current ROI-query deep model show only a weak trend on the 77 exact test images. However, the larger 1000-image overlap probe shows that averaged raw EEG waveform features can predict real fMRI visual-family patterns well above shuffled controls, and this holds across multiple random heldout seeds.
+5. EEG-predicted ROI outputs from the current ROI-query deep model are weak in all-ROI207 on the 77 exact test images. However, the residual ROI-query model passes a visual-family real-fMRI check (all_visual_curated rank 0.6107, p=0.0004), and the larger 1000-image overlap probe shows that averaged raw EEG waveform features can predict real fMRI visual-family patterns well above shuffled controls across multiple random heldout seeds.
 6. The raw EEG signal has plausible temporal/channel structure: 300-400 ms is the strongest single 100 ms window, and posterior P/PO/O channels outperform full EEG. This changes the bottleneck diagnosis: EEG is not pure noise; the current end-to-end ROI-query route is not yet extracting the full available signal.
 7. A small trainable factorized-query model predicts real visual-fMRI targets above shifted/shuffled controls across four heldout seeds. Mean rank is slightly above the full-channel ridge baseline (0.6461 vs 0.6399), but the margin is modest and not monotonic across seeds; this is a promising interpretable model result, not yet a final SOTA claim.
-8. In raw-ridge image retrieval, V-JEPA2 and CLIP+V-JEPA2 are stronger semantic target spaces than CLIP alone on the overlap split. This should remain a diagnostic target-space result, not the main architecture baseline.
-9. In the ATM-aligned retrieval check, TRIBE cortical reranking improves the frozen ATM baseline on the 200-image test set, with shifted/permutation-null reranking clearly lower. Test-split CV shows a consistent small heldout trend, but the train-image validation route is invalid because training-image retrieval is nearly saturated and selects no rerank. This keeps the rerank result promising but not final.
-10. The ROI-query constraint is competitive with a no-query pooled ROI head across two seeds, but does not yet show a stable scalar-performance advantage. It should not be sold as the sole reason ROI prediction works; its current strongest value is ordered ROI identity and query-specific interpretability.
-11. For an AAAI-level story, the current strongest direction is to stabilize the ATM ROI-query branch and query/time/channel interpretability across seeds, then test whether the cortical branch improves generated-image quality or provides stronger cortical maps at larger/finer ROI resolution.
+8. Direct ATM supervision with real THINGS-fMRI visual64 targets gives a strong exact-test77 alignment signal. The pooled head reaches higher image-level ROI retrieval rank, while the ordered-query head gives higher ROI-wise correlation. This supports real visual-fMRI target predictability, but not yet a scalar-rank advantage for ordered queries.
+9. In raw-ridge image retrieval, V-JEPA2 and CLIP+V-JEPA2 are stronger semantic target spaces than CLIP alone on the overlap split. This should remain a diagnostic target-space result, not the main architecture baseline.
+10. In the ATM-aligned retrieval check, TRIBE cortical reranking improves the frozen ATM baseline on the 200-image test set, with shifted/permutation-null reranking clearly lower. Test-split CV shows a consistent small heldout trend, but the train-image validation route is invalid because training-image retrieval is nearly saturated and selects no rerank. This keeps the rerank result promising but not final.
+11. The ROI-query constraint is competitive with no-query pooled ROI heads. Pooled tends to be strong on scalar ROI rank, while query provides fixed ROI identity and query-specific interpretation. Therefore same-seed retrieval versus semantic-only ATM and direct real-fMRI visual64 correlation should be treated as primary checks; 38-ROI rank alone is auxiliary.
+12. For an AAAI-level story, the current strongest direction is to stabilize direct real-fMRI visual targets, add query-time/channel/cortical interpretability on the real visual64 target, and then scale to calibrated TRIBE/surface-prototype targets for larger image budgets.
 """
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(text, encoding="utf-8")

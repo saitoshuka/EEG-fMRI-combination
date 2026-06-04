@@ -243,7 +243,18 @@ class TokenAttentionSemanticHead(nn.Module):
 
 
 def parse_hemi(names: np.ndarray) -> torch.Tensor:
-    return torch.tensor([0 if str(name).startswith("lh_") else 1 for name in names], dtype=torch.long)
+    # 0/1 are explicit surface hemispheres; 2 is a neutral bucket for ROI sets
+    # such as THINGS-fMRI binary metadata columns that are not hemisphere-coded.
+    ids = []
+    for name in names:
+        text = str(name)
+        if text.startswith("lh_"):
+            ids.append(0)
+        elif text.startswith("rh_"):
+            ids.append(1)
+        else:
+            ids.append(2)
+    return torch.tensor(ids, dtype=torch.long)
 
 
 def strip_hemi(name: str) -> str:
@@ -304,7 +315,7 @@ class OrderedRoiQueryBranch(nn.Module):
         self.n_roi = len(roi_names)
         self.query = nn.Parameter(torch.randn(self.n_roi, hidden_dim) * 0.02)
         self.token_proj = nn.Linear(token_dim, hidden_dim)
-        self.hemi_embed = nn.Embedding(2, hidden_dim)
+        self.hemi_embed = nn.Embedding(3, hidden_dim)
         if group_features is None:
             group_features = one_hot_group_features(roi_names)
         self.group_proj = nn.Linear(group_features.shape[1], hidden_dim, bias=False)
@@ -812,11 +823,12 @@ def main() -> int:
     clip_train_all = torch.load(args.image_root / "ViT-H-14_features_train.pt", map_location="cpu", weights_only=False)[
         "img_features"
     ].float()
-    clip_test = torch.load(args.image_root / "ViT-H-14_features_test.pt", map_location="cpu", weights_only=False)[
+    clip_test_all = torch.load(args.image_root / "ViT-H-14_features_test.pt", map_location="cpu", weights_only=False)[
         "img_features"
     ].float()
     clip_train = F.normalize(clip_train_all[train_image_index], dim=-1)
-    clip_test = F.normalize(clip_test, dim=-1)
+    test_image_index = test_roi_npz["image_index"].astype(int)
+    clip_test = F.normalize(clip_test_all[test_image_index], dim=-1)
 
     eeg_cache_dir = None if args.no_eeg_cache else args.eeg_cache_dir
     cache_tag = args.train_roi.stem
@@ -870,7 +882,6 @@ def main() -> int:
     ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
-    test_image_index = test_roi_npz["image_index"].astype(int)
     test_eeg_stack = load_or_build_test_eeg_stack(
         args.data_root,
         args.subjects,

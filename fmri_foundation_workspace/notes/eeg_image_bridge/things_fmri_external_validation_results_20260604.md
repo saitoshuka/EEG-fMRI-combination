@@ -8,6 +8,10 @@
 - Real fMRI target: subject-averaged ROI beta matrix, 6407 images x 207 shared binary ROI mask columns.
 - fMRI subjects: sub-01, sub-02, sub-03.
 
+Note: `ROI207` below is only shorthand for the 207 shared binary ROI mask
+columns found in the ds004192 ICA-beta voxel metadata across the available
+subjects. It is not a separate official THINGS-fMRI atlas name.
+
 ## Overall Heldout Test Results
 
 | predictor | rank | shifted | delta | top1 | top5 | diag_off | image_corr | roi_corr | p_rank |
@@ -172,6 +176,30 @@ tokens.
 | mean | 0.6399 | 0.6461 | 0.4937 | 0.1523 | 0.2356 | 0.1843 | 0.0061 | 0.4976 |
 | std | 0.0148 | 0.0112 | 0.0164 | 0.0272 | 0.0124 | 0.0167 | 0.0103 | 0.0068 |
 
+### ATM Direct Real-fMRI Visual64 Supervision
+
+This is the cleanest direct EEG-to-real-fMRI gate so far. Targets are the
+`all_visual_curated` subset of shared THINGS-fMRI binary ROI columns: 64 visual
+ROI columns selected from the 207 shared metadata-derived ROI columns using the
+curated early/mid/ventral visual sets in
+`analyze_things_fmri_external_roi_breakdown.py`. Training uses the 6330
+THINGS-EEG/THINGS-fMRI train-overlap images; evaluation uses the 77 exact
+THINGS-EEG test images that overlap THINGS-fMRI. No TRIBE target is used in
+this run.
+
+| head | n_test | n_roi | rank | shifted | delta | top1 | top5 | image_corr | roi_corr |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| query | 77 | 64 | 0.7384 | 0.4838 | 0.2546 | 0.0779 | 0.1818 | 0.0525 | 0.1488 |
+| pooled | 77 | 64 | 0.7739 | 0.4836 | 0.2903 | 0.0649 | 0.2468 | 0.0619 | 0.0932 |
+
+Interpretation: direct real-fMRI visual ROI supervision gives a clear
+above-shifted alignment signal. The pooled no-query head has higher image-level
+ROI retrieval rank, while the ordered-query head has higher ROI-wise correlation
+in the best checkpoint. Therefore the performance claim should be "EEG can
+predict real visual-fMRI ROI patterns"; the ordered-query claim should be framed
+as fixed ROI identity and interpretability unless later finer-resolution query
+targets outperform pooled controls.
+
 ### Image Retrieval With Cortical Reranking
 
 The following retrieval table is a raw-ridge diagnostic, not the final ATM
@@ -234,19 +262,38 @@ future validation-selected runs show a consistent performance advantage.
 
 #### Query-vs-Pooled Seed Stability
 
-| seed | head | best_clip_top1 | final_clip_top1 | best_clip_top5 | final_clip_top5 | best_roi_rank | final_roi_rank |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 33 | query | 0.4150 | 0.4100 | 0.8000 | 0.8000 | 0.7849 | 0.7641 |
-| 33 | pooled | 0.4050 | 0.4050 | 0.7700 | 0.7700 | 0.7912 | 0.7892 |
-| 11 | query | 0.4050 | 0.3900 | 0.7650 | 0.7600 | 0.8016 | 0.7981 |
-| 11 | pooled | 0.4000 | 0.3800 | 0.7600 | 0.7600 | 0.8011 | 0.7878 |
+| seed | head | best_clip_top1 | final_clip_top1 | best_clip_top5 | final_clip_top5 | best_clip_rank | final_clip_rank | best_roi_rank | final_roi_rank |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 33 | semantic | 0.3850 | 0.3850 | 0.7800 | 0.7800 | 0.9785 | 0.9780 |  |  |
+| 33 | query | 0.4150 | 0.4100 | 0.8000 | 0.8000 | 0.9796 | 0.9796 | 0.7849 | 0.7641 |
+| 33 | pooled | 0.4050 | 0.4050 | 0.7700 | 0.7700 | 0.9791 | 0.9778 | 0.7912 | 0.7892 |
+| 11 | semantic | 0.4050 | 0.3950 | 0.7950 | 0.7850 | 0.9804 | 0.9804 |  |  |
+| 11 | query | 0.4050 | 0.3900 | 0.7650 | 0.7600 | 0.9775 | 0.9770 | 0.8016 | 0.7981 |
+| 11 | pooled | 0.4000 | 0.3800 | 0.7600 | 0.7600 | 0.9772 | 0.9763 | 0.8011 | 0.7878 |
+| 77 | semantic | 0.4050 | 0.3900 | 0.7600 | 0.7600 | 0.9770 | 0.9759 |  |  |
+| 77 | query | 0.3950 | 0.3800 | 0.7800 | 0.7800 | 0.9770 | 0.9751 | 0.7933 | 0.7819 |
+| 77 | pooled | 0.3900 | 0.3550 | 0.7550 | 0.7350 | 0.9777 | 0.9760 | 0.8006 | 0.8006 |
 
-Interpretation: across the two checked seeds, query and pooled heads are very
-close. Seed 33 favors pooled slightly on ROI rank but query on CLIP retrieval;
-seed 11 favors query slightly on both. This supports the conservative claim that
-ordered queries are competitive and interpretability-preserving, but it is not
-yet enough to claim a robust scalar-performance advantage over pooled ROI
-prediction.
+#### Same-Seed Retrieval Gain Over Semantic-Only ATM
+
+| seed | head | best_top1_gain_vs_semantic | best_top5_gain_vs_semantic | best_rank_gain_vs_semantic | best_roi_rank |
+| --- | --- | --- | --- | --- | --- |
+| 33 | query | 0.0300 | 0.0200 | 0.0011 | 0.7849 |
+| 33 | pooled | 0.0200 | -0.0100 | 0.0006 | 0.7912 |
+| 11 | query | 0.0000 | -0.0300 | -0.0029 | 0.8016 |
+| 11 | pooled | -0.0050 | -0.0350 | -0.0032 | 0.8011 |
+| 77 | query | -0.0100 | 0.0200 | 0.0001 | 0.7933 |
+| 77 | pooled | -0.0150 | -0.0050 | 0.0008 | 0.8006 |
+
+Interpretation: across the checked seeds, query and pooled heads are very close.
+Pooled often has a slight edge on the low-dimensional 38-ROI rank. The primary
+performance-facing metric is now same-seed CLIP retrieval against the
+semantic-only ATM baseline, not query-vs-pooled ROI rank alone. If the semantic
+baseline matches or exceeds the ROI-supervised heads, the query branch should be
+claimed as a structured interpretability mechanism rather than a performance
+improvement. To make spatial knowledge itself a main claim, the next target
+should be finer-grained cortical prototypes or surface parcels rather than only
+38 ROI averages.
 
 ## Current Interpretation
 
@@ -254,10 +301,11 @@ prediction.
 2. The raw TRIBE/parcel38 teacher also aligns strongly with real THINGS-fMRI on heldout exact images. It is stronger than direct V-JEPA2 and slightly stronger than CLIP in rank, although CLIP has stronger top5 and ROI-wise correlation in some views.
 3. The signal is concentrated in curated visual ROIs. Nonvisual/uncurated ROI performance is weak, which supports a stimulus-visual interpretation rather than a global artifact.
 4. CLIP-residual teacher signal is not robust in all ROI207, but shows visual-family structure. This means residual claims should be phrased narrowly and validated by ROI family, not by all-ROI averages.
-5. EEG-predicted ROI outputs from the current ROI-query deep model show only a weak trend on the 77 exact test images. However, the larger 1000-image overlap probe shows that averaged raw EEG waveform features can predict real fMRI visual-family patterns well above shuffled controls, and this holds across multiple random heldout seeds.
+5. EEG-predicted ROI outputs from the current ROI-query deep model are weak in all-ROI207 on the 77 exact test images. However, the residual ROI-query model passes a visual-family real-fMRI check (all_visual_curated rank 0.6107, p=0.0004), and the larger 1000-image overlap probe shows that averaged raw EEG waveform features can predict real fMRI visual-family patterns well above shuffled controls across multiple random heldout seeds.
 6. The raw EEG signal has plausible temporal/channel structure: 300-400 ms is the strongest single 100 ms window, and posterior P/PO/O channels outperform full EEG. This changes the bottleneck diagnosis: EEG is not pure noise; the current end-to-end ROI-query route is not yet extracting the full available signal.
 7. A small trainable factorized-query model predicts real visual-fMRI targets above shifted/shuffled controls across four heldout seeds. Mean rank is slightly above the full-channel ridge baseline (0.6461 vs 0.6399), but the margin is modest and not monotonic across seeds; this is a promising interpretable model result, not yet a final SOTA claim.
-8. In raw-ridge image retrieval, V-JEPA2 and CLIP+V-JEPA2 are stronger semantic target spaces than CLIP alone on the overlap split. This should remain a diagnostic target-space result, not the main architecture baseline.
-9. In the ATM-aligned retrieval check, TRIBE cortical reranking improves the frozen ATM baseline on the 200-image test set, with shifted/permutation-null reranking clearly lower. Test-split CV shows a consistent small heldout trend, but the train-image validation route is invalid because training-image retrieval is nearly saturated and selects no rerank. This keeps the rerank result promising but not final.
-10. The ROI-query constraint is competitive with a no-query pooled ROI head across two seeds, but does not yet show a stable scalar-performance advantage. It should not be sold as the sole reason ROI prediction works; its current strongest value is ordered ROI identity and query-specific interpretability.
-11. For an AAAI-level story, the current strongest direction is to stabilize the ATM ROI-query branch and query/time/channel interpretability across seeds, then test whether the cortical branch improves generated-image quality or provides stronger cortical maps at larger/finer ROI resolution.
+8. Direct ATM supervision with real THINGS-fMRI visual64 targets gives a strong exact-test77 alignment signal. The pooled head reaches higher image-level ROI retrieval rank, while the ordered-query head gives higher ROI-wise correlation. This supports real visual-fMRI target predictability, but not yet a scalar-rank advantage for ordered queries.
+9. In raw-ridge image retrieval, V-JEPA2 and CLIP+V-JEPA2 are stronger semantic target spaces than CLIP alone on the overlap split. This should remain a diagnostic target-space result, not the main architecture baseline.
+10. In the ATM-aligned retrieval check, TRIBE cortical reranking improves the frozen ATM baseline on the 200-image test set, with shifted/permutation-null reranking clearly lower. Test-split CV shows a consistent small heldout trend, but the train-image validation route is invalid because training-image retrieval is nearly saturated and selects no rerank. This keeps the rerank result promising but not final.
+11. The ROI-query constraint is competitive with no-query pooled ROI heads. Pooled tends to be strong on scalar ROI rank, while query provides fixed ROI identity and query-specific interpretation. Therefore same-seed retrieval versus semantic-only ATM and direct real-fMRI visual64 correlation should be treated as primary checks; 38-ROI rank alone is auxiliary.
+12. For an AAAI-level story, the current strongest direction is to stabilize direct real-fMRI visual targets, add query-time/channel/cortical interpretability on the real visual64 target, and then scale to calibrated TRIBE/surface-prototype targets for larger image budgets.

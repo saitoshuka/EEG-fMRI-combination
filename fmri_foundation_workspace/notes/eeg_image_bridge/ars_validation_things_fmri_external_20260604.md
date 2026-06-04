@@ -8,6 +8,9 @@
 - Data access level: local derived results; no external upload
 - Primary result report: `fmri_foundation_workspace/notes/eeg_image_bridge/things_fmri_external_validation_results_20260604.md`
 - Primary result directory: `fmri_foundation_workspace/results/eeg_image_bridge/things_fmri_external_validation`
+- ROI naming note: `ROI207` is shorthand for the 207 shared binary ROI mask
+  columns extracted from ds004192 ICA-beta voxel metadata across available
+  subjects, not a separate official THINGS-fMRI atlas name.
 - Reproducibility artifacts:
   - `scripts/build_things_fmri_overlap.py`
   - `scripts/extract_things_fmri_roi_betas.py`
@@ -26,7 +29,8 @@
 | Full-surface TRIBE teacher aligns with real THINGS-fMRI after train-only calibration | official test77 all-visual rank 0.6878 vs shifted 0.5210, p=0.001; train-overlap holdout1000 all-visual rank 0.6913 vs shifted 0.4964, p=0.001 | Stronger teacher-quality evidence than parcel38 alone because it starts from the 20,484-vertex fsaverage5 surface and only later calibrates into measured ROI207 space. |
 | Raw TRIBE/parcel38 teacher aligns with real THINGS-fMRI207 on 77 exact heldout test images | rank 0.6528 vs shifted 0.4880, p=0.0002 | Strong support that the pseudo-cortical teacher captures stimulus-driven real fMRI structure. |
 | CLIP and V-JEPA also align with real fMRI | CLIP rank 0.6224, p=0.0004; V-JEPA rank 0.5668, p=0.0222 | TRIBE is not the only visual representation aligned with fMRI. The claim should be comparative, not exclusive. |
-| Current ROI-query deep model predictions are weak on 77 exact test images | EEG raw-strong rank 0.5113, p=0.1038; EEG residual rank 0.5436, p=0.0836 | Not sufficient for a main EEG-to-real-fMRI claim. |
+| Current ROI-query deep model predictions are weak in all-ROI207 on 77 exact test images | EEG raw-strong all-ROI rank 0.5113, p=0.1038; EEG residual all-ROI rank 0.5436, p=0.0836 | Not sufficient for a whole-brain EEG-to-real-fMRI claim. |
+| ROI-query residual model passes a visual-family real-fMRI check on the 77 exact test images | EEG residual -> real all_visual_curated rank 0.6107, delta 0.1384, p=0.0004; image-pattern corr 0.1086 | This supports a cautious visual-cortex claim: the model's predicted pseudo-cortical signal aligns with real image-evoked fMRI in curated visual ROIs, not across the whole brain. |
 | Larger 1000-image overlap probe shows EEG contains usable real-fMRI signal | raw EEG waveform visual-family rank 0.6456, p=0.0010 | Strong evidence against the hypothesis that visual EEG is pure noise for fMRI-like targets. |
 | Fit-target shuffle control fails | visual-family rank 0.4933, p=0.7632 | Supports that the raw EEG heldout result is not a trivial metric or split artifact. |
 | Signal is visual-family concentrated | raw EEG visual-family rank 0.6456 vs nonvisual rank 0.5165 | Supports a visual neuroscience interpretation rather than an all-brain/global shortcut. |
@@ -35,12 +39,15 @@
 | ROI-family timing shows a limited visual hierarchy trend | early_visual best keep 100-200 ms; mid/ventral/all-visual best keep 300-400 ms | Useful neuroscience-facing evidence, but not a clean feed-forward latency cascade. |
 | Trainable factorized-query model predicts real visual fMRI | posterior factorized query rank 0.6604 vs shifted 0.4764; full-ridge reference 0.6456; posterior-ridge ceiling 0.6744 | A promising trainable ordered-query result; still below the strongest closed-form posterior ridge. |
 | Trainable factorized-query is stable over heldout seeds | 4-seed rank mean 0.6461, shifted mean 0.4937, full-ridge mean 0.6399 | Stable above null, modestly above full-ridge on average, but not a large performance jump. |
+| Direct ATM supervision on real THINGS-fMRI visual64 targets gives a strong exact-test signal | ordered-query best ROI rank 0.7384 vs shifted 0.4838; pooled best ROI rank 0.7739 vs shifted 0.4836 | Strongest direct EEG-to-real-visual-fMRI model evidence so far; the target is real fMRI visual ROI beta, not TRIBE pseudo-ROI. |
+| Direct real-fMRI visual64 correlations are positive but modest | ordered-query best image-pattern corr 0.0525, ROI-wise corr 0.1488; pooled best image-pattern corr 0.0619, ROI-wise corr 0.0932 | Rank is much stronger than absolute correlation, likely reflecting noisy small-n fMRI and normalization limits. Report both metrics. |
+| Ordered query does not beat pooled on scalar visual64 ROI rank | query best rank 0.7384; pooled best rank 0.7739 | Query should be framed as fixed ROI identity and interpretability, not as the scalar-rank winner at this resolution. |
 | Raw-ridge cortical reranking gives small diagnostic retrieval gains | CLIP rank 0.9129 -> 0.9152; V-JEPA2 0.9592 -> 0.9597; CLIP+V-JEPA2 0.9657 -> 0.9658 | Useful target-space diagnostic only; not the final architecture baseline. |
 | V-JEPA2 is a stronger semantic target than CLIP on this overlap retrieval protocol | EEG->V-JEPA2 rank 0.9592 vs EEG->CLIP rank 0.9129; CLIP+V-JEPA2 rank 0.9657 | Important control: cortical branch should be framed as complementary to strong visual foundation features. |
 | ATM baseline plus TRIBE cortical reranking improves retrieval under the architecture-aligned baseline | ATM baseline top1 0.520/top5 0.855/rank 0.9854; 16k CUDA TRIBE rerank top1 0.565/top5 0.895/rank 0.9899; shifted top1 0.420; permutation-null top1 0.423, p=0 | Strongest performance-facing evidence so far because the baseline is the ATM route from the visual decoding paper. Still needs validation-selected rerank hyperparameters before final paper claim. |
 | Train-image validation is not a valid rerank selector | 16k train-image validation baseline top1 0.9905/top5 1.000/rank 1.000; validation selects no rerank, so test remains top1 0.520 | Important negative diagnostic: the THINGS training-image retrieval route is nearly saturated and cannot be used to tune rerank hyperparameters. |
 | Test-split CV supports a small rerank trend but is not final | 20 splits within test200: baseline top1 0.6280 +/- 0.0372, selected rerank top1 0.6665 +/- 0.0357, gain +0.0385 +/- 0.0262; rank gain +0.0029 +/- 0.0012 | Useful diagnostic that the rerank gain is not only one manual grid pick, but still too small-sample and test-set-internal for a final paper number. |
-| Ordered ROI-query and pooled ROI heads are very close across checked seeds | seed33 query vs pooled best ROI rank 0.7849 vs 0.7912, best CLIP top1 0.415 vs 0.405; seed11 query vs pooled best ROI rank 0.8016 vs 0.8011, best CLIP top1 0.405 vs 0.400 | The query design is competitive and no longer looks inferior, but two seeds do not justify a robust scalar-performance advantage claim. |
+| Ordered ROI-query and pooled ROI heads are close across checked seeds | seed33 query vs pooled best CLIP top1 0.415 vs 0.405, ROI rank 0.7849 vs 0.7912; seed11 0.405 vs 0.400, ROI rank 0.8016 vs 0.8011; seed77 0.395 vs 0.390, ROI rank 0.7933 vs 0.8006 | Retrieval should be the primary performance metric against the ATM baseline. The 38-ROI rank is a useful target-learning sanity check but too coarse to carry the spatial-resolution claim alone. |
 
 ## Fallacy Scan
 
@@ -75,6 +82,8 @@ Passes:
 - ROI-family time analysis shows early_visual peaking earlier (100-200 ms) than mid/ventral/all-visual families (300-400 ms), supporting a modest visual hierarchy story.
 - A small trainable factorized-query readout now beats full-channel ridge and MLP/linear trainable baselines on the seed-33 heldout split.
 - The factorized-query readout remains above shifted/shuffled controls across four heldout seeds, with a small mean improvement over full-channel ridge.
+- Direct ATM training on real THINGS-fMRI visual64 targets gives above-shifted exact-test77 ROI retrieval for both ordered-query and pooled ROI heads.
+- The ordered-query head has higher ROI-wise correlation than pooled on the direct visual64 best checkpoint, even though pooled has higher image-level ROI rank.
 - The ATM-aligned TRIBE reranker improves the frozen ATM retrieval baseline on the 200-image test set, with shifted/permutation-null reranking below the real rerank.
 - Test-split CV inside the 200-image test set repeatedly selects a TRIBE rerank setting and gives a mean top1 gain of about +0.039, which reduces concern that the rerank result is only one arbitrary top-k/weight choice.
 - Raw-ridge cortical reranking also gives small target-space diagnostic gains in CLIP, V-JEPA2, and CLIP+V-JEPA2 spaces.
@@ -83,9 +92,10 @@ Passes:
 
 Fails or incomplete:
 
-- The proposed ROI-query deep architecture does not yet turn the available EEG signal into a robust heldout EEG-to-real-fMRI result.
+- The proposed ROI-query deep architecture does not yet turn the available EEG signal into a robust whole-brain EEG-to-real-fMRI result. Its best current external result is visual-family-specific, not all-ROI.
+- The direct visual64 result is still based on only 77 exact-overlap test images and one seed; it needs a pooled/query multi-seed check and a shared207 or surface-prototype control before becoming a final paper claim.
 - The strongest EEG result remains the closed-form posterior ridge ceiling; the trainable factorized-query model is multi-seed stable but its improvement over full ridge is modest.
-- Ordered ROI queries are competitive with pooled no-query ROI prediction across two seeds, but not yet supported as a robust scalar ROI-rank improvement mechanism.
+- Ordered ROI queries are competitive with pooled no-query ROI prediction across seeds and usually slightly better on CLIP retrieval, but not supported as a robust scalar 38-ROI-rank improvement mechanism.
 - The original 77-image exact THINGS-EEG test external validation is too small and has low subject-pattern reliability.
 - ATM rerank improvement is promising, but train-image validation is saturated and selects no rerank; test-split CV is encouraging but not a final locked test protocol. The final paper number needs either an independent validation set, a preregistered setting justified before test reporting, or a larger external test.
 - No generated-image improvement has been shown under the new real-fMRI-aligned supervision.
@@ -96,10 +106,11 @@ Fails or incomplete:
 1. Run temporal/channel/ROI-family weight and ablation analysis for the best trainable model across seeds if this becomes a central claim.
 2. Repeat image-feature ceilings over the same multi-seed splits or freeze seed 33 as the final protocol with a clear rationale.
 3. Convert the ATM rerank into a cleaner protocol: choose top-k/weight on validation or freeze the 100/0.5 rule before test reporting.
-4. For the query branch, focus the next validation on query-target identity, query-time/channel specificity, and cortical maps rather than claiming ROI-rank superiority.
-5. Test whether the factorized-query cortical branch improves generated-image quality or reconstruction diversity, not just retrieval rank.
-6. Freeze the split/protocol, then run a final statistical correction or clearly label ROI-family tests as exploratory.
-7. Decide whether the final paper claims "performance gain", "performance-preserving neural grounding", or "stimulus-mediated cortical supervision" based on generated-image and finer ROI results.
+4. For the query branch, use retrieval as the primary performance check and use 38-ROI rank only as auxiliary target-learning evidence.
+5. Move the spatial-knowledge claim from 38 ROI averages to finer cortical prototypes or surface parcels, with a matched pooled control.
+6. Test whether the factorized-query cortical branch improves generated-image quality or reconstruction diversity, not just retrieval rank.
+7. Freeze the split/protocol, then run a final statistical correction or clearly label ROI-family tests as exploratory.
+8. Decide whether the final paper claims "performance gain", "performance-preserving neural grounding", or "stimulus-mediated cortical supervision" based on generated-image and finer ROI results.
 
 ## Claim Status
 
@@ -108,15 +119,18 @@ Supported now:
 - "Stimulus-derived cortical teachers align with real image-evoked fMRI, especially in visual ROIs."
 - "The full-surface TRIBE teacher provides a measurable pseudo-cortical approximation to real THINGS-fMRI visual responses under train-only calibration."
 - "Averaged visual EEG contains a measurable signal for predicting real fMRI visual-family patterns under image-heldout evaluation."
+- "The residual ROI-query model's predicted pseudo-cortical output aligns above null with real THINGS-fMRI in visual ROIs on the exact overlapping test images."
 - "The raw EEG signal has plausible visual temporal/channel structure under the overlap heldout protocol."
 - "A trainable ordered-query readout can extract this signal across multiple image-heldout splits, with modest average improvement over full-channel ridge and strong improvement over shifted/shuffled controls."
+- "ATM-style EEG models can predict real THINGS-fMRI visual ROI patterns on exact overlapping test images under direct real-fMRI supervision."
 - "TRIBE cortical reranking improves an ATM retrieval baseline on the current 200-image test set, but the rerank hyperparameters still need a final validation protocol."
 - "A small test-split CV diagnostic supports the cortical rerank trend, but it is not sufficient as a final locked-test claim."
 - "Ordered ROI queries provide fixed ROI identity for query-specific visualization and interpretation."
 
 Not supported yet:
 
-- "The current ROI-query deep model robustly distills fMRI spatial knowledge into EEG."
-- "Ordered ROI-query attention robustly improves scalar ROI-rank prediction over a pooled ROI head."
+- "The current ROI-query deep model robustly distills whole-brain fMRI spatial knowledge into EEG."
+- "Ordered ROI-query attention robustly improves scalar 38-ROI-rank prediction over a pooled ROI head."
+- "Ordered ROI-query attention robustly improves scalar real visual64 ROI rank over a pooled ROI head."
 - "The method is ready as an AAAI main-conference contribution."
 - "The approach improves image generation or retrieval under strict final evaluation."
