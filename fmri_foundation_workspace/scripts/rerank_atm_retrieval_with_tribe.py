@@ -50,6 +50,68 @@ def norm_rows(x: np.ndarray, eps: float = 1e-8) -> np.ndarray:
     return x / np.maximum(np.linalg.norm(x, axis=1, keepdims=True), eps)
 
 
+def choose_device(value: str) -> torch.device:
+    if value == "auto":
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return torch.device(value)
+
+
+def fit_pca_basis_torch(
+    y_fit: np.ndarray,
+    n_components: int,
+    device: torch.device,
+    seed: int,
+) -> tuple[np.ndarray, np.ndarray, float]:
+    if device.type == "cpu":
+        return fit_pca_basis(y_fit, n_components)
+    torch.manual_seed(seed)
+    y = torch.as_tensor(y_fit, dtype=torch.float32, device=device)
+    mean = y.mean(dim=0, keepdim=True)
+    yc = y - mean
+    k = min(n_components, yc.shape[0] - 1, yc.shape[1])
+    q = min(max(k + 8, k), yc.shape[0] - 1, yc.shape[1])
+    with torch.no_grad():
+        _, s, v = torch.pca_lowrank(yc, q=q, center=False, niter=4)
+        components = v[:, :k].T.contiguous()
+        total_var = torch.sum(yc * yc).clamp_min(1e-8)
+        explained = float(torch.sum(s[:k] * s[:k]).item() / total_var.item())
+    out_components = components.detach().cpu().numpy().astype(np.float32)
+    out_mean = mean.detach().cpu().numpy().astype(np.float32)
+    del y, mean, yc, s, v, components
+    torch.cuda.empty_cache()
+    return out_components, out_mean, explained
+
+
+def ridge_fit_predict_torch(
+    x_train: np.ndarray,
+    y_train: np.ndarray,
+    x_val: np.ndarray,
+    alpha: float,
+    device: torch.device,
+) -> np.ndarray:
+    if device.type == "cpu":
+        return ridge_fit_predict(x_train, y_train, x_val, alpha)
+    with torch.no_grad():
+        x = torch.as_tensor(x_train, dtype=torch.float32, device=device)
+        y = torch.as_tensor(y_train, dtype=torch.float32, device=device)
+        xv_raw = torch.as_tensor(x_val, dtype=torch.float32, device=device)
+        x_mean = x.mean(dim=0, keepdim=True)
+        x_std = x.std(dim=0, keepdim=True).clamp_min(1e-6)
+        y_mean = y.mean(dim=0, keepdim=True)
+        y_std = y.std(dim=0, keepdim=True).clamp_min(1e-6)
+        xz = (x - x_mean) / x_std
+        yz = (y - y_mean) / y_std
+        xv = (xv_raw - x_mean) / x_std
+        gram = xz.T @ xz
+        gram.diagonal().add_(alpha)
+        weights = torch.linalg.solve(gram, xz.T @ yz)
+        pred = xv @ weights
+        out = pred.detach().cpu().numpy().astype(np.float32)
+    del x, y, xv_raw, x_mean, x_std, y_mean, y_std, xz, yz, xv, gram, weights, pred
+    torch.cuda.empty_cache()
+    return out
+
+
 def rank_metrics_from_order(order: np.ndarray) -> dict[str, float]:
     n = order.shape[0]
     ranks = np.array([np.where(order[i] == i)[0][0] + 1 for i in range(n)])
@@ -102,10 +164,12 @@ def main() -> int:
     parser.add_argument("--settings", default="10:0.5,10:0.7,20:0.5,100:0.5,100:0.7")
     parser.add_argument("--perm-n", type=int, default=100)
     parser.add_argument("--seed", type=int, default=13)
+    parser.add_argument("--device", default="auto")
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     parser.add_argument("--note", type=Path, default=DEFAULT_NOTE)
     args = parser.parse_args()
 
+    device = choose_device(args.device)
     rng = np.random.default_rng(args.seed)
     train_npz = np.load(args.train_targets)
     test_npz = np.load(args.test_targets)
@@ -114,7 +178,9 @@ def main() -> int:
     train_image_index = train_npz["image_index"].astype(int)
     test_image_index = test_npz["image_index"].astype(int)
 
-    components, mean, explained = fit_pca_basis(y_train, args.components)
+    components, mean, explained = fit_pca_basis_torch(
+        y_train, args.components, device, args.seed
+    )
     z_train = project_pca(y_train, components, mean)
     z_test = project_pca(y_test, components, mean)
 
@@ -127,7 +193,9 @@ def main() -> int:
     )
     y_train_rep = np.repeat(z_train, len(subjects) * 4, axis=0)
     x_test = eeg_test.transpose(1, 0, 2).reshape(len(y_test) * len(subjects), -1)
-    pred_z_rep = ridge_fit_predict(x_train, y_train_rep, x_test, args.ridge_alpha)
+    pred_z_rep = ridge_fit_predict_torch(
+        x_train, y_train_rep, x_test, args.ridge_alpha, device
+    )
     pred_z = pred_z_rep.reshape(len(y_test), len(subjects), -1).mean(axis=1)
 
     clip_features = torch.load(
@@ -220,6 +288,10 @@ def main() -> int:
         "components": args.components,
         "explained_variance": explained,
         "ridge_alpha": args.ridge_alpha,
+        "device": str(device),
+        "cuda_device_name": torch.cuda.get_device_name(0)
+        if device.type == "cuda" and torch.cuda.is_available()
+        else "",
         "subjects": subjects,
         "train_images": int(len(y_train)),
         "test_images": int(len(y_test)),
@@ -237,6 +309,7 @@ def main() -> int:
         f"Train targets: `{args.train_targets}`",
         f"Test targets: `{args.test_targets}`",
         f"Components: `{args.components}`; explained variance: `{explained:.4f}`",
+        f"Device: `{device}`",
         f"Subjects: `{len(subjects)}`; train images: `{len(y_train)}`; test images: `{len(y_test)}`",
         "",
         "The frozen ATM embedding retrieves CLIP image candidates first. The TRIBE score only reranks the top-k candidate set.",

@@ -340,6 +340,39 @@ class OrderedRoiQueryBranch(nn.Module):
         return pred, z_roi
 
 
+class PooledRoiBranch(nn.Module):
+    """No-query ROI control: one pooled token predicts the whole ROI vector."""
+
+    def __init__(
+        self,
+        n_roi: int,
+        token_dim: int = 250,
+        hidden_dim: int = 256,
+        n_heads: int = 4,
+        dropout: float = 0.1,
+    ):
+        super().__init__()
+        self.query = nn.Parameter(torch.randn(1, hidden_dim) * 0.02)
+        self.token_proj = nn.Linear(token_dim, hidden_dim)
+        self.cross_attn = nn.MultiheadAttention(hidden_dim, n_heads, dropout=dropout, batch_first=True)
+        self.norm = nn.LayerNorm(hidden_dim)
+        self.head = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, n_roi),
+        )
+
+    def forward(self, tokens: Tensor) -> tuple[Tensor, Tensor]:
+        bsz = tokens.shape[0]
+        kv = self.token_proj(tokens)
+        query = self.query.unsqueeze(0).expand(bsz, -1, -1)
+        pooled, _ = self.cross_attn(query, kv, kv, need_weights=False)
+        pooled = self.norm(pooled.squeeze(1) + query.squeeze(1))
+        pred = self.head(pooled)
+        return pred, pooled.unsqueeze(1)
+
+
 class AtmSemanticSpatial(nn.Module):
     def __init__(
         self,
@@ -355,6 +388,7 @@ class AtmSemanticSpatial(nn.Module):
         atm_d_ff: int = 256,
         semantic_head: str = "shallow",
         use_spatial: bool = True,
+        spatial_head: str = "query",
     ):
         super().__init__()
         default_config = Config(
@@ -387,14 +421,24 @@ class AtmSemanticSpatial(nn.Module):
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
         self.loss_func = ClipLoss()
         self.use_spatial = use_spatial
+        self.spatial_head = spatial_head
         if use_spatial:
             assert roi_names is not None and vertex_counts is not None
-            self.roi_branch = OrderedRoiQueryBranch(
-                roi_names,
-                vertex_counts,
-                group_features=group_features,
-                token_dim=atm_d_model,
-            )
+            if spatial_head == "query":
+                self.roi_branch = OrderedRoiQueryBranch(
+                    roi_names,
+                    vertex_counts,
+                    group_features=group_features,
+                    token_dim=atm_d_model,
+                )
+            elif spatial_head == "pooled":
+                self.roi_branch = PooledRoiBranch(
+                    n_roi=len(roi_names),
+                    token_dim=atm_d_model,
+                    n_heads=atm_heads,
+                )
+            else:
+                raise ValueError(f"Unknown spatial_head: {spatial_head}")
 
     def forward(self, x: Tensor, subject_ids: Tensor) -> dict[str, Tensor]:
         tokens = self.encoder(x, None, subject_ids)
@@ -735,6 +779,7 @@ def main() -> int:
     parser.add_argument("--atm-d-ff", type=int, default=256)
     parser.add_argument("--subject-mode", choices=["token", "none"], default="token")
     parser.add_argument("--semantic-head", choices=["shallow", "attn"], default="shallow")
+    parser.add_argument("--spatial-head", choices=["query", "pooled"], default="query")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     parser.add_argument("--tag", default="")
@@ -821,6 +866,7 @@ def main() -> int:
         atm_d_ff=args.atm_d_ff,
         semantic_head=args.semantic_head,
         use_spatial=args.mode == "spatial",
+        spatial_head=args.spatial_head,
     ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
@@ -958,8 +1004,10 @@ def main() -> int:
                 "atm_d_ff": args.atm_d_ff,
                 "subject_mode": args.subject_mode,
                 "semantic_head": args.semantic_head,
+                "spatial_head": args.spatial_head if args.mode == "spatial" else "none",
                 "seed": args.seed,
-                "ordered_roi_supervision": True,
+                "ordered_roi_supervision": args.mode == "spatial",
+                "ordered_roi_query_attention": args.mode == "spatial" and args.spatial_head == "query",
                 "atm_channel_token_slice": (
                     "enc_out[:, 1:64, :] when subject token is present"
                     if args.subject_mode == "token"

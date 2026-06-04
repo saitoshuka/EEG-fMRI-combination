@@ -73,6 +73,9 @@ def markdown_table(df: pd.DataFrame, columns: list[str], digits: int = 4) -> str
         cells = []
         for col in columns:
             value = row[col]
+            if pd.isna(value):
+                cells.append("")
+                continue
             if isinstance(value, float):
                 cells.append(fmt(value, digits))
             else:
@@ -104,6 +107,15 @@ def main() -> None:
     trainable_multiseed_path = args.external_dir / "raw_eeg_factorized_query_multiseed_summary.json"
     image_holdout_summary_path = (
         args.external_dir / "image_features_to_realfmri_overlap_holdout" / "summary.json"
+    )
+    tribe_fullsurface_summary_path = (
+        args.external_dir / "tribe_fullsurface_to_realfmri" / "summary.json"
+    )
+    atm_rerank_validated_path = (
+        args.external_dir.parent / "atm_tribe_rerank_n16540_validated" / "summary.json"
+    )
+    atm_rerank_testsplit_cv_path = (
+        args.external_dir.parent / "atm_tribe_rerank_n16540_testsplit_cv" / "summary.json"
     )
 
     key_family = family_eval[
@@ -214,6 +226,55 @@ def main() -> None:
                 }
             )
     overlap_holdout = pd.DataFrame(overlap_holdout_rows)
+
+    fullsurface_rows = []
+    if tribe_fullsurface_summary_path.exists():
+        fullsurface = json.loads(tribe_fullsurface_summary_path.read_text())
+        for protocol in fullsurface["summaries"]:
+            for family in [
+                "all_roi207",
+                "all_visual_curated",
+                "classical_visual_roi",
+                "early_visual",
+                "mid_visual",
+                "ventral_category_high",
+            ]:
+                row = protocol[family]
+                fullsurface_rows.append(
+                    {
+                        "protocol": protocol["protocol"],
+                        "family": family,
+                        "n_roi": row["n_roi"],
+                        "rank": row["rank_percentile"],
+                        "shifted": row["shifted_rank_percentile"],
+                        "delta": row["rank_delta"],
+                        "image_corr": row["image_pattern_corr_mean"],
+                        "roi_corr": row["roi_corr_fisher_mean"],
+                        "p_rank": row["rank_p_perm"],
+                        "pca_components": protocol["best_components"],
+                        "pca_var": protocol["pca_explained_variance_ratio_sum"],
+                    }
+                )
+    fullsurface_table = (
+        markdown_table(
+            pd.DataFrame(fullsurface_rows),
+            [
+                "protocol",
+                "family",
+                "n_roi",
+                "rank",
+                "shifted",
+                "delta",
+                "image_corr",
+                "roi_corr",
+                "p_rank",
+                "pca_components",
+                "pca_var",
+            ],
+        )
+        if fullsurface_rows
+        else "Not run yet."
+    )
 
     multiseed_rows = []
     seed_dirs = [args.external_dir / "raw_eeg_to_realfmri_overlap_holdout"]
@@ -373,6 +434,239 @@ def main() -> None:
                 "shuffle_rank",
             ],
         )
+    retrieval_rows = []
+    for dirname, label in [
+        ("eeg_clip_retrieval_cortical_rerank", "CLIP ViT-H/14"),
+        ("eeg_vjepa_retrieval_cortical_rerank", "V-JEPA2 ViT-g"),
+        ("eeg_clip_vjepa_retrieval_cortical_rerank", "CLIP + V-JEPA2"),
+    ]:
+        path = args.external_dir / dirname / "summary.csv"
+        if not path.exists():
+            continue
+        df = pd.read_csv(path)
+        mean = df[df["seed"].astype(str) == "mean"].iloc[0]
+        retrieval_rows.append(
+            {
+                "target_space": label,
+                "semantic_rank": float(mean["semantic_rank"]),
+                "fusion_rank": float(mean["fusion_rank"]),
+                "rank_gain": float(mean["fusion_minus_semantic_rank"]),
+                "semantic_top5": float(mean["semantic_top5"]),
+                "fusion_top5": float(mean["fusion_top5"]),
+                "top5_gain": float(mean["fusion_minus_semantic_top5"]),
+                "mean_fusion_weight": float(mean["fusion_weight"]),
+            }
+        )
+    retrieval_text = (
+        markdown_table(
+            pd.DataFrame(retrieval_rows),
+            [
+                "target_space",
+                "semantic_rank",
+                "fusion_rank",
+                "rank_gain",
+                "semantic_top5",
+                "fusion_top5",
+                "top5_gain",
+                "mean_fusion_weight",
+            ],
+        )
+        if retrieval_rows
+        else "Not run yet."
+    )
+
+    atm_rerank_rows = []
+    for dirname, label in [
+        ("atm_tribe_rerank_n4096", "ATM + TRIBE rerank 4096"),
+        ("atm_tribe_rerank_n16540", "ATM + TRIBE rerank 16540"),
+    ]:
+        path = args.external_dir.parent / dirname / "rerank_metrics.json"
+        if not path.exists():
+            continue
+        payload = json.loads(path.read_text())
+        baseline = next(row for row in payload["rows"] if row["kind"] == "baseline")
+        real_rows = [row for row in payload["rows"] if row["kind"] == "real_tribe_rerank"]
+        best = max(real_rows, key=lambda row: (row["top1"], row["top5"], row["rank_percentile"]))
+        shifted = next(
+            row
+            for row in payload["rows"]
+            if row["kind"] == "shifted_tribe_rerank"
+            and row["topk"] == best["topk"]
+            and abs(row["tribe_weight"] - best["tribe_weight"]) < 1e-8
+        )
+        null = next(
+            row
+            for row in payload["rows"]
+            if row["kind"] == "permutation_null"
+            and row["topk"] == best["topk"]
+            and abs(row["tribe_weight"] - best["tribe_weight"]) < 1e-8
+        )
+        atm_rerank_rows.append(
+            {
+                "run": label,
+                "train_images": payload["train_images"],
+                "device": payload.get("device", "cpu_or_unrecorded"),
+                "baseline_top1": baseline["top1"],
+                "best_topk": best["topk"],
+                "best_weight": best["tribe_weight"],
+                "rerank_top1": best["top1"],
+                "top1_gain": best["top1"] - baseline["top1"],
+                "rerank_top5": best["top5"],
+                "top5_gain": best["top5"] - baseline["top5"],
+                "rerank_rank": best["rank_percentile"],
+                "rank_gain": best["rank_percentile"] - baseline["rank_percentile"],
+                "shifted_top1": shifted["top1"],
+                "null_top1": null["top1"],
+                "null_p": null["top1_p_ge_real"],
+            }
+        )
+    atm_rerank_text = (
+        markdown_table(
+            pd.DataFrame(atm_rerank_rows),
+            [
+                "run",
+                "train_images",
+                "device",
+                "baseline_top1",
+                "best_topk",
+                "best_weight",
+                "rerank_top1",
+                "top1_gain",
+                "rerank_top5",
+                "top5_gain",
+                "rerank_rank",
+                "rank_gain",
+                "shifted_top1",
+                "null_top1",
+                "null_p",
+            ],
+        )
+        if atm_rerank_rows
+        else "Not run yet."
+    )
+    atm_rerank_validation_text = "Not run yet."
+    if atm_rerank_validated_path.exists() or atm_rerank_testsplit_cv_path.exists():
+        chunks = []
+        if atm_rerank_validated_path.exists():
+            payload = json.loads(atm_rerank_validated_path.read_text())
+            validation_baseline = next(
+                row for row in payload["validation_rows"] if row["kind"] == "validation_baseline"
+            )
+            selected = payload["selected_setting"]
+            test_baseline = next(row for row in payload["test_rows"] if row["kind"] == "test_baseline")
+            test_selected = next(
+                row for row in payload["test_rows"] if row["kind"] == "test_real_validated_rerank"
+            )
+            chunks.append(
+                "Train-image validation selected no rerank: "
+                f"validation baseline top1 {validation_baseline['top1']:.4f}, "
+                f"top5 {validation_baseline['top5']:.4f}, rank {validation_baseline['rank_percentile']:.4f}; "
+                f"selected top-k {selected['topk']} / weight {selected['tribe_weight']}. "
+                f"Test therefore remains baseline top1 {test_selected['top1']:.4f} "
+                f"vs {test_baseline['top1']:.4f}. "
+                "This is an important negative diagnostic: THINGS training-image validation is nearly saturated "
+                "and is not a useful hyperparameter-selection route for the reranker."
+            )
+        if atm_rerank_testsplit_cv_path.exists():
+            payload = json.loads(atm_rerank_testsplit_cv_path.read_text())
+            mean = payload["mean"]
+            std = payload["std"]
+            rows = [
+                {
+                    "metric": "top1",
+                    "baseline": f"{mean['baseline_top1']:.4f} +/- {std['baseline_top1']:.4f}",
+                    "selected_rerank": f"{mean['selected_top1']:.4f} +/- {std['selected_top1']:.4f}",
+                    "gain": f"{mean['gain_top1']:.4f} +/- {std['gain_top1']:.4f}",
+                },
+                {
+                    "metric": "top5",
+                    "baseline": f"{mean['baseline_top5']:.4f} +/- {std['baseline_top5']:.4f}",
+                    "selected_rerank": f"{mean['selected_top5']:.4f} +/- {std['selected_top5']:.4f}",
+                    "gain": f"{mean['gain_top5']:.4f} +/- {std['gain_top5']:.4f}",
+                },
+                {
+                    "metric": "rank pct",
+                    "baseline": f"{mean['baseline_rank']:.4f} +/- {std['baseline_rank']:.4f}",
+                    "selected_rerank": f"{mean['selected_rank']:.4f} +/- {std['selected_rank']:.4f}",
+                    "gain": f"{mean['gain_rank']:.4f} +/- {std['gain_rank']:.4f}",
+                },
+            ]
+            chunks.append(
+                "A 20-split diagnostic CV inside the 200-image test set selected reranking on every split "
+                f"(selection counts: {payload['selection_counts']}). It is not a final locked test number, "
+                "but it checks that the top-k/weight gain is not only one manual test-grid pick.\n\n"
+                + markdown_table(pd.DataFrame(rows), ["metric", "baseline", "selected_rerank", "gain"])
+            )
+        atm_rerank_validation_text = "\n\n".join(chunks)
+
+    def atm_summary_row(label: str, dirname: str, branch: str) -> dict[str, object] | None:
+        path = args.external_dir.parent / "atm_roi_spatial_branch" / dirname / "summary.json"
+        if not path.exists():
+            return None
+        payload = json.loads(path.read_text())
+        rows = payload["rows"]
+        out: dict[str, object] = {
+            "model": label,
+            "branch": branch,
+            "train_images": payload["train_images"],
+            "spatial_head": payload.get("spatial_head", "query_or_legacy"),
+        }
+        for metric in [
+            "clip_top1",
+            "clip_top5",
+            "clip_rank_percentile",
+            "roi_rank_percentile",
+            "roi_top1",
+            "roi_top5",
+        ]:
+            vals = [row[metric] for row in rows if metric in row]
+            if vals:
+                out[f"best_{metric}"] = max(vals)
+                out[f"final_{metric}"] = vals[-1]
+        return out
+
+    query_control_rows = [
+        row
+        for row in [
+            atm_summary_row(
+                "semantic_only",
+                "atm_semantic_group_train_seed33_budget16540_n16540_d256_none_seed33",
+                "semantic baseline",
+            ),
+            atm_summary_row(
+                "ordered_query_raw_parcel38",
+                "atm_spatial_parcel_raw_strongroi_train_seed33_budget16540_n16540_d256_none_lam010_col001_sp010",
+                "ROI-query spatial branch",
+            ),
+            atm_summary_row(
+                "pooled_raw_parcel38_control",
+                "atm_spatial_pooled_parcel_raw_strongroi_train_seed33_budget16540_n16540_d256_none_lam010_col001_sp010",
+                "no-query pooled ROI head",
+            ),
+        ]
+        if row is not None
+    ]
+    query_control_text = (
+        markdown_table(
+            pd.DataFrame(query_control_rows),
+            [
+                "model",
+                "branch",
+                "train_images",
+                "spatial_head",
+                "best_clip_top1",
+                "final_clip_top1",
+                "best_clip_top5",
+                "final_clip_top5",
+                "best_clip_rank_percentile",
+                "final_clip_rank_percentile",
+                "best_roi_rank_percentile",
+                "final_roi_rank_percentile",
+            ],
+        )
+        if query_control_rows
+        else "Not run yet."
+    )
 
     text = f"""# THINGS-fMRI External Validation Results
 
@@ -387,6 +681,17 @@ def main() -> None:
 ## Overall Heldout Test Results
 
 {markdown_table(overall, ['predictor', 'rank', 'shifted', 'delta', 'top1', 'top5', 'diag_off', 'image_corr', 'roi_corr', 'p_rank'])}
+
+## Full-Surface TRIBE Teacher to Real fMRI
+
+This teacher-quality gate uses full TRIBE fsaverage5 surface predictions
+(20,484 vertices), not only parcel38. A PCA + ridge calibration is fit on
+training-overlap images only, then evaluated on same-image real THINGS-fMRI ROI
+betas. The official test protocol uses the 77 THINGS-EEG test images that
+exactly overlap THINGS-fMRI; the larger protocol holds out 1000 images from the
+training-overlap set to reduce small-test noise.
+
+{fullsurface_table}
 
 ## ROI-Family Breakdown
 
@@ -435,15 +740,60 @@ tokens.
 
 {trainable_multiseed_text}
 
+### Image Retrieval With Cortical Reranking
+
+The following retrieval table is a raw-ridge diagnostic, not the final ATM
+baseline. It trains EEG-to-image-feature ridge retrieval on each heldout split,
+then adds factorized-query EEG-to-real-fMRI visual similarity. Fusion weights
+are selected on validation split only.
+
+{retrieval_text}
+
+### ATM Baseline With TRIBE Cortical Reranking
+
+This is the main architecture-aligned retrieval check. The baseline is the ATM
+embedding from *Visual Decoding and Reconstruction via EEG Embeddings with
+Guided Diffusion*. The cortical score only reranks the top-k CLIP candidates,
+so the semantic ATM route remains unchanged.
+
+{atm_rerank_text}
+
+#### Rerank Hyperparameter Validation Diagnostics
+
+{atm_rerank_validation_text}
+
+### ROI Query Constraint Control
+
+This ablation tests whether the ordered ROI-query attention constraint itself
+improves performance. The control uses the same ATM backbone, same raw parcel38
+TRIBE ROI target, same losses, same 16,540-image budget, same subjects, and same
+CUDA training setup, but replaces the 38 ordered ROI queries with a single
+pooled no-query ROI head that predicts the full ROI vector.
+
+{query_control_text}
+
+Interpretation: the pooled no-query control reaches a similar or slightly higher
+ROI rank than the ordered-query branch, so ROI rank alone does not prove that
+the query constraint is responsible for learning the cortical target. The
+ordered-query branch still has a clearer neuroscience-facing role because each
+output has a fixed ROI identity, enabling query-target confusion matrices,
+query-time/channel maps, and cortical surface visualization. Therefore the
+query branch should be claimed as a structured interpretability mechanism unless
+future validation-selected runs show a consistent performance advantage.
+
 ## Current Interpretation
 
-1. The raw TRIBE/parcel38 teacher aligns strongly with real THINGS-fMRI on heldout exact images. It is stronger than direct V-JEPA2 and slightly stronger than CLIP in rank, although CLIP has stronger top5 and ROI-wise correlation in some views.
-2. The signal is concentrated in curated visual ROIs. Nonvisual/uncurated ROI performance is weak, which supports a stimulus-visual interpretation rather than a global artifact.
-3. CLIP-residual teacher signal is not robust in all ROI207, but shows visual-family structure. This means residual claims should be phrased narrowly and validated by ROI family, not by all-ROI averages.
-4. EEG-predicted ROI outputs from the current ROI-query deep model show only a weak trend on the 77 exact test images. However, the larger 1000-image overlap probe shows that averaged raw EEG waveform features can predict real fMRI visual-family patterns well above shuffled controls, and this holds across multiple random heldout seeds.
-5. The raw EEG signal has plausible temporal/channel structure: 300-400 ms is the strongest single 100 ms window, and posterior P/PO/O channels outperform full EEG. This changes the bottleneck diagnosis: EEG is not pure noise; the current end-to-end ROI-query route is not yet extracting the full available signal.
-6. A small trainable factorized-query model predicts real visual-fMRI targets above shifted/shuffled controls across four heldout seeds. Mean rank is slightly above the full-channel ridge baseline (0.6461 vs 0.6399), but the margin is modest and not monotonic across seeds; this is a promising interpretable model result, not yet a final SOTA claim.
-7. For an AAAI-level story, the current strongest direction is to stabilize the query/time/channel interpretability across seeds and reconnect the best cortical branch to image retrieval/generation.
+1. The full-surface TRIBE teacher aligns strongly with real THINGS-fMRI on same-image heldout tests after train-only calibration, especially in visual ROI families. This supports using TRIBE as a pseudo-cortical teacher, while still requiring cautious language because the evaluation uses a learned calibration into THINGS-fMRI ROI space.
+2. The raw TRIBE/parcel38 teacher also aligns strongly with real THINGS-fMRI on heldout exact images. It is stronger than direct V-JEPA2 and slightly stronger than CLIP in rank, although CLIP has stronger top5 and ROI-wise correlation in some views.
+3. The signal is concentrated in curated visual ROIs. Nonvisual/uncurated ROI performance is weak, which supports a stimulus-visual interpretation rather than a global artifact.
+4. CLIP-residual teacher signal is not robust in all ROI207, but shows visual-family structure. This means residual claims should be phrased narrowly and validated by ROI family, not by all-ROI averages.
+5. EEG-predicted ROI outputs from the current ROI-query deep model show only a weak trend on the 77 exact test images. However, the larger 1000-image overlap probe shows that averaged raw EEG waveform features can predict real fMRI visual-family patterns well above shuffled controls, and this holds across multiple random heldout seeds.
+6. The raw EEG signal has plausible temporal/channel structure: 300-400 ms is the strongest single 100 ms window, and posterior P/PO/O channels outperform full EEG. This changes the bottleneck diagnosis: EEG is not pure noise; the current end-to-end ROI-query route is not yet extracting the full available signal.
+7. A small trainable factorized-query model predicts real visual-fMRI targets above shifted/shuffled controls across four heldout seeds. Mean rank is slightly above the full-channel ridge baseline (0.6461 vs 0.6399), but the margin is modest and not monotonic across seeds; this is a promising interpretable model result, not yet a final SOTA claim.
+8. In raw-ridge image retrieval, V-JEPA2 and CLIP+V-JEPA2 are stronger semantic target spaces than CLIP alone on the overlap split. This should remain a diagnostic target-space result, not the main architecture baseline.
+9. In the ATM-aligned retrieval check, TRIBE cortical reranking improves the frozen ATM baseline on the 200-image test set, with shifted/permutation-null reranking clearly lower. Test-split CV shows a consistent small heldout trend, but the train-image validation route is invalid because training-image retrieval is nearly saturated and selects no rerank. This keeps the rerank result promising but not final.
+10. The ROI-query constraint does not currently beat the no-query pooled ROI head on ROI rank. It should not be sold as the reason scalar ROI prediction works; its current value is ordered ROI identity and query-specific interpretability.
+11. For an AAAI-level story, the current strongest direction is to stabilize the ATM ROI-query branch and query/time/channel interpretability across seeds, then test whether the cortical branch improves generated-image quality or provides stronger cortical maps at larger/finer ROI resolution.
 """
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(text, encoding="utf-8")
