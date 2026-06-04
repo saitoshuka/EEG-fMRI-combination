@@ -131,7 +131,11 @@ def load_predictor(paths: list[Path], key: str) -> dict[tuple[str, int], np.ndar
         x = np.asarray(data[key], dtype=np.float32)
         image_indices = np.asarray(data["image_index"])
         if "split" in data:
-            splits = data["split"].astype(str)
+            split_payload = np.asarray(data["split"]).astype(str)
+            if split_payload.shape == ():
+                splits = np.asarray([str(split_payload.item())] * len(x), dtype=object)
+            else:
+                splits = split_payload
         else:
             splits = np.asarray([infer_split(path, len(x))] * len(x), dtype=object)
         for split, idx, row in zip(splits, image_indices, x):
