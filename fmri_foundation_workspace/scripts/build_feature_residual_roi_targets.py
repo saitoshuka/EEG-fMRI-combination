@@ -125,7 +125,7 @@ def build_one(
             pred_train[fold_idx] = fold_ridge.predict(feature_train[fold_idx])
         ridge = fit_ridge(feature_train, raw_train, best_alpha)
     else:
-        ridge = fit_ridge(feature_train[train_idx], raw_train[train_idx], best_alpha)
+        ridge = fit_ridge(feature_train, raw_train, best_alpha)
         pred_train = ridge.predict(feature_train)
     pred_test = ridge.predict(feature_test)
     residual_train = raw_train - pred_train
