@@ -91,3 +91,78 @@ Current status: partial evidence. The route is workable enough to continue, but
 the paper needs one stronger result before it can be positioned as a main-track
 submission: either a retrieval/generation improvement, or a much clearer
 query-specific cortical structure result on k256/finer targets.
+
+## Update: Direct Real-fMRI Visual64 Evidence
+
+Date: 2026-06-05
+
+The previous verdict treated real fMRI validation as a missing requirement.
+This has now partially improved. We trained ATM spatial heads directly against
+real THINGS-fMRI visual64 ROI targets on the 6,330-image EEG/fMRI overlap and
+evaluated on the 77 exact-overlap test images.
+
+| head | visual64 rank | shifted | image corr | ROI corr | query-target diag-offdiag |
+|---|---:|---:|---:|---:|---:|
+| ordered query | 0.7384 | 0.4838 | 0.0525 | 0.1488 | 0.1332 |
+| pooled no-query | 0.7739 | 0.4836 | 0.0619 | 0.0932 | 0.0908 |
+
+Interpretation:
+
+- Real measured fMRI visual ROI patterns are decodable from THINGS-EEG above
+  shifted controls.
+- Pooled prediction is still stronger for scalar image-level ROI retrieval.
+- Ordered query is stronger for ROI identity binding and gives cleaner
+  interpretability.
+- The real-fMRI query-time analysis is neuro-plausible: ordered-query early
+  visual ROIs depend most on 100-200 ms EEG, whereas mid/ventral visual ROIs
+  depend most on 300-400 ms EEG. Query-channel attention is concentrated over
+  posterior channels such as P8, Oz, P6, O1/O2, and PO electrodes.
+
+This upgrades the "real fMRI grounding" gate from fail to **partial pass for
+visual cortex**, but not to a whole-brain fMRI claim. The shared207 run shows
+that positive signal is driven by visual curated ROIs, while nonvisual or
+uncurated ROIs remain near chance.
+
+Relevant file:
+
+- `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_interpretability_20260605.md`
+
+## Update: Proto256 Query Constraint Check
+
+Date: 2026-06-05
+
+The actual ATM query branch was trained on the stricter CLIP+V-JEPA2 residual
+k256 cortical-prototype target.
+
+| head | best ROI rank | shifted | final CLIP top1 | final CLIP top5 | identity diag-offdiag |
+|---|---:|---:|---:|---:|---:|
+| ordered query | 0.6020 | 0.5014 | 0.425 | 0.815 | 0.0168 |
+| pooled no-query | 0.6515 | 0.5031 | 0.415 | 0.760 | 0.0106 |
+
+Interpretation:
+
+- Finer residual cortical prototypes are learnable from EEG.
+- The original ordered query constraint is not yet a performance-improving head
+  for k256; pooled no-query wins ROI rank.
+- Ordered query retains stronger fixed-prototype identity and target-geometry
+  structure, so it remains useful for interpretability.
+- A coordinate-aware query run is now the highest-value next experiment because
+  it tests whether explicit cortical geometry can close the performance gap
+  while preserving identity binding.
+
+Relevant file:
+
+- `fmri_foundation_workspace/notes/eeg_image_bridge/atm_proto256_residual_query_vs_pooled_20260605.md`
+
+## Updated AAAI Gate
+
+Current status after the real-fMRI and proto256 updates:
+
+- **Workshop / internal presentation**: ready with careful wording.
+- **AAAI main conference**: still not ready, but the story is now more viable
+  than the 2026-06-04 verdict because it has measured real-fMRI visual-cortex
+  evidence and finer k256 prototype evidence.
+- The remaining main-conference blocker is not "can EEG predict any cortical
+  target"; it is whether the proposed query/spatial-prior architecture can beat
+  strong pooled/semantic controls or provide sufficiently robust, confirmatory,
+  neuroscience-aligned interpretability.

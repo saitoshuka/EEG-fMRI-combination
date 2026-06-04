@@ -106,8 +106,8 @@ specificity evidence.
 | "ROI-query branch improves same-framework EEG retrieval." | **Weak pass**: positive top1 gain, but needs seeds/bootstrap for paper. |
 | "V-JEPA alone is enough." | **Fail**: current evidence argues against this. |
 | "Cortical supervision gives query-specific structure." | **Pass for pseudo-cortical targets**: diagonal/query geometry/time/channel controls support it. |
-| "We distill real fMRI spatial knowledge into EEG." | **Fail for now**: needs real fMRI validation or much stronger teacher-grounding evidence. |
-| "This can be a top-conference story." | **Conditional**: needs finer cortical targets, confirmatory protocol, and external validation. |
+| "We distill real fMRI spatial knowledge into EEG." | **Partial pass for visual cortex**: direct THINGS-fMRI visual64 prediction is above shifted null and has plausible query-time/channel structure, but this is not whole-brain fMRI distillation. |
+| "This can be a top-conference story." | **Conditional**: now has real visual-fMRI grounding and k256 prototype evidence, but still needs stronger query-vs-pooled/semantic controls or a confirmatory neuroscience interpretability protocol. |
 
 ### Next Experiments With Highest Decision Value
 
@@ -117,10 +117,15 @@ specificity evidence.
 2. **Finer cortical target.** Move from parcel38 to K=128/256 visual-cortical
    prototypes or selected fsaverage vertices. This answers the spatial
    resolution criticism.
-3. **External cortical validation.** Use THINGS-fMRI or another image-fMRI
-   dataset to quantify whether TRIBE/V-JEPA pseudo-cortical targets align with
-   measured visual cortex responses.
-4. **Specificity controls.** Add shuffled ROI order, shuffled cortical
+3. **Spatial-prior query architecture.** The first k256 run shows pooled
+   no-query beats ordered query in ROI rank, while query preserves stronger
+   identity binding. The next meaningful test is coordinate-aware or
+   locality-regularized query, not another broad lambda sweep.
+4. **External cortical validation.** The direct THINGS-fMRI visual64 result
+   should be extended into a confirmatory protocol: fixed checkpoints, no
+   test-selected visualization choices, and ROI-family hypotheses declared in
+   advance.
+5. **Specificity controls.** Add shuffled ROI order, shuffled cortical
    geometry, and nonvisual parcels/prototypes. This tells reviewers the model
    is not just learning a generic posterior ERP.
 
@@ -135,3 +140,16 @@ The safest high-level story is:
 > retrieval gains within a trainable ATM-style decoder. This motivates a finer,
 > externally validated cortical-prototype distillation framework.
 
+### 2026-06-05 Reviewer Update
+
+The direct THINGS-fMRI visual64 experiment materially improves the reviewer
+positioning. The project no longer relies only on TRIBE pseudo-cortical targets:
+EEG-to-real-visual-fMRI prediction passes shifted controls on the exact
+overlap test split. However, a critical reviewer would still note that pooled
+prediction beats ordered query in scalar ROI rank on both real visual64 and
+residual proto256. The safest main claim is therefore:
+
+> Query constraints improve spatial identity and neuroscience interpretability;
+> pooled heads remain stronger as pure predictors. The next architectural
+> contribution must show that explicit cortical geometry/locality can preserve
+> query identity while closing the pooled-rank gap.
