@@ -153,7 +153,6 @@ def compute_roi_means(
     transpose: bool,
     row_indices: np.ndarray,
     voxel_meta: pd.DataFrame,
-    roi_column: str,
     roi_source: str,
     roi_names: list[str],
     chunk_size: int,
@@ -163,10 +162,16 @@ def compute_roi_means(
     inverse = np.empty_like(order)
     inverse[order] = np.arange(len(order))
     if roi_source == BINARY_ROI_SENTINEL:
-        roi_masks = [
-            np.flatnonzero(pd.to_numeric(voxel_meta[roi], errors="coerce").fillna(0).to_numpy() > 0.5)
-            for roi in roi_names
-        ]
+        roi_masks = []
+        for roi in roi_names:
+            if roi not in voxel_meta.columns:
+                roi_masks.append(np.asarray([], dtype=np.int64))
+            else:
+                roi_masks.append(
+                    np.flatnonzero(
+                        pd.to_numeric(voxel_meta[roi], errors="coerce").fillna(0).to_numpy() > 0.5
+                    )
+                )
     else:
         roi_masks = [
             np.flatnonzero(voxel_meta[roi_source].fillna("").astype(str).to_numpy() == roi)
@@ -194,6 +199,7 @@ def main() -> None:
     parser.add_argument("--overlap-csv", type=Path, default=DEFAULT_OVERLAP)
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     parser.add_argument("--roi-column", default="auto")
+    parser.add_argument("--roi-name-policy", choices=["intersection", "union"], default="intersection")
     parser.add_argument("--h5-dataset", default=None)
     parser.add_argument("--max-rois", type=int, default=300)
     parser.add_argument("--chunk-size", type=int, default=128)
@@ -207,13 +213,41 @@ def main() -> None:
     if not subject_dirs:
         raise FileNotFoundError(f"No subject directories found in {args.fmri_root}")
 
-    subject_mats = []
-    report: dict[str, object] = {"subjects": []}
-    roi_names: list[str] | None = None
-    roi_source_used: str | None = None
-
+    subject_infos = []
+    roi_sources: list[str] = []
+    roi_name_sets: list[set[str]] = []
     for subject_dir in subject_dirs:
         subject = subject_dir.name
+        meta_dir = subject_dir / "voxel-metadata"
+        voxel_path = meta_dir / f"{subject}_task-things_voxel-metadata.tsv"
+        voxel_meta = read_flexible_table(voxel_path)
+        roi_source, current_roi_names = choose_roi_source(voxel_meta, args.roi_column, args.max_rois)
+        roi_sources.append(roi_source)
+        roi_name_sets.append(set(current_roi_names))
+        subject_infos.append(
+            {
+                "subject_dir": subject_dir,
+                "subject": subject,
+                "roi_source": roi_source,
+                "n_available_rois": len(current_roi_names),
+            }
+        )
+    if len(set(roi_sources)) != 1:
+        raise ValueError(f"ROI source differs across subjects: {roi_sources}")
+    roi_source_used = roi_sources[0]
+    if args.roi_name_policy == "intersection":
+        roi_names = sorted(set.intersection(*roi_name_sets))
+    else:
+        roi_names = sorted(set.union(*roi_name_sets))
+    if not roi_names:
+        raise ValueError("No ROI names available after applying ROI name policy.")
+
+    subject_mats = []
+    report: dict[str, object] = {"subjects": []}
+
+    for info in subject_infos:
+        subject_dir = info["subject_dir"]
+        subject = str(info["subject"])
         meta_dir = subject_dir / "voxel-metadata"
         stim_path = meta_dir / f"{subject}_task-things_stimulus-metadata.tsv"
         voxel_path = meta_dir / f"{subject}_task-things_voxel-metadata.tsv"
@@ -231,15 +265,7 @@ def main() -> None:
         row_indices = merged["row_index"].to_numpy(dtype=np.int64)
 
         voxel_meta = read_flexible_table(voxel_path)
-        roi_source, current_roi_names = choose_roi_source(voxel_meta, args.roi_column, args.max_rois)
-        if roi_source_used is None:
-            roi_source_used = roi_source
-        elif roi_source != roi_source_used:
-            raise ValueError(f"ROI source mismatch: {roi_source_used} vs {roi_source}")
-        if roi_names is None:
-            roi_names = current_roi_names
-        elif roi_names != current_roi_names:
-            raise ValueError("ROI names differ across subjects; use a shared metadata column.")
+        roi_source = str(info["roi_source"])
 
         dataset_name, transpose = find_h5_dataset(h5_path, len(stim), args.h5_dataset)
         mat = compute_roi_means(
@@ -262,13 +288,14 @@ def main() -> None:
                 "n_stimulus_rows": int(len(stim)),
                 "n_voxels": int(len(voxel_meta)),
                 "roi_source": roi_source,
+                "n_available_rois": int(info["n_available_rois"]),
                 "n_rois": int(len(roi_names)),
             }
         )
 
     subject_betas = np.stack(subject_mats, axis=0)
     mean_betas = np.nanmean(subject_betas, axis=0).astype(np.float32)
-    roi_names_array = np.asarray(roi_names or [], dtype=object)
+    roi_names_array = np.asarray(roi_names, dtype=object)
     args.out_dir.mkdir(parents=True, exist_ok=True)
     out_path = args.out_dir / "things_fmri_roi_betas_subject_averaged.npz"
     np.savez_compressed(
@@ -277,6 +304,7 @@ def main() -> None:
         subject_roi_beta=subject_betas.astype(np.float32),
         roi_names=roi_names_array,
         roi_source=np.asarray(roi_source_used),
+        roi_name_policy=np.asarray(args.roi_name_policy),
         image_file=image_files,
         split=overlap["split"].astype(str).to_numpy(),
         image_index=overlap["image_index"].to_numpy(),
@@ -287,7 +315,9 @@ def main() -> None:
     report["n_images"] = int(len(image_files))
     report["n_train"] = int((overlap["split"] == "train").sum())
     report["n_test"] = int((overlap["split"] == "test").sum())
-    report["roi_names"] = list(roi_names or [])
+    report["roi_source"] = roi_source_used
+    report["roi_name_policy"] = args.roi_name_policy
+    report["roi_names"] = list(roi_names)
     report_path = args.out_dir / "things_fmri_roi_betas_subject_averaged_summary.json"
     report_path.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))

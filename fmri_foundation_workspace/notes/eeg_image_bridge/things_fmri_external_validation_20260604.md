@@ -49,6 +49,30 @@ Planned comparisons after the real fMRI ROI matrix is extracted:
 - Optional target-space controls: compare CLIP-residual, raw ROI, and V-JEPA
   residual target variants only if they change the next decision.
 
+First completed external validation:
+
+- Downloaded THINGS-fMRI ICA beta derivatives for `sub-01` to `sub-03`
+  (`44G` local-only data).
+- Extracted subject-averaged real fMRI ROI beta matrix:
+  `results/eeg_image_bridge/things_fmri_external_validation/things_fmri_roi_betas_subject_averaged.npz`.
+- Matrix shape: 6,407 exact shared images x 207 shared fMRI ROI mask columns,
+  with 6,330 train and 77 heldout same-image test examples.
+
+Heldout 77-image real fMRI validation:
+
+| predictor | rank | shifted | delta | image corr | ROI corr | permutation p(rank) |
+|---|---:|---:|---:|---:|---:|---:|
+| teacher raw parcel38 -> real fMRI207 | 0.6528 | 0.4880 | 0.1647 | 0.1671 | 0.0828 | 0.0002 |
+| teacher residual parcel38 -> real fMRI207 | 0.4938 | 0.4884 | 0.0055 | 0.0430 | -0.0103 | 0.5773 |
+| EEG raw-strong parcel38 -> real fMRI207 | 0.5113 | 0.4985 | 0.0128 | 0.0081 | 0.0099 | 0.1038 |
+| EEG residual parcel38 -> real fMRI207 | 0.5436 | 0.4909 | 0.0526 | 0.0465 | 0.0456 | 0.0836 |
+
+Interpretation of the first run: raw TRIBE/visual ROI teacher targets are
+clearly aligned with real stimulus-driven THINGS-fMRI. The EEG-predicted ROI
+outputs show only a weak heldout trend against real fMRI and should not yet be
+claimed as significant. The result currently supports teacher validity much
+more strongly than EEG-to-real-fMRI transfer.
+
 Interpretation rule: a positive result supports the weaker claim that the
 stimulus-derived cortical teacher is aligned with real stimulus-driven fMRI
 structure. It does not by itself prove EEG contains all that spatial structure;

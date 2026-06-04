@@ -61,6 +61,44 @@ def retrieval_metrics(query: np.ndarray, target: np.ndarray) -> dict[str, float]
     }
 
 
+def permutation_null(
+    query: np.ndarray,
+    target: np.ndarray,
+    n_permutations: int,
+    seed: int,
+) -> dict[str, float]:
+    observed = retrieval_metrics(query, target)
+    if n_permutations <= 0:
+        return {
+            "n_permutations": 0,
+            "rank_percentile_p": float("nan"),
+            "diag_minus_offdiag_p": float("nan"),
+        }
+    rng = np.random.default_rng(seed)
+    rank_values = []
+    diag_values = []
+    for _ in range(n_permutations):
+        perm = rng.permutation(len(target))
+        metrics = retrieval_metrics(query, target[perm])
+        rank_values.append(metrics["rank_percentile"])
+        diag_values.append(metrics["diag_minus_offdiag"])
+    rank_values = np.asarray(rank_values)
+    diag_values = np.asarray(diag_values)
+    return {
+        "n_permutations": int(n_permutations),
+        "rank_percentile_p": float(
+            ((rank_values >= observed["rank_percentile"]).sum() + 1) / (n_permutations + 1)
+        ),
+        "diag_minus_offdiag_p": float(
+            ((diag_values >= observed["diag_minus_offdiag"]).sum() + 1) / (n_permutations + 1)
+        ),
+        "rank_percentile_null_mean": float(rank_values.mean()),
+        "rank_percentile_null_std": float(rank_values.std()),
+        "diag_minus_offdiag_null_mean": float(diag_values.mean()),
+        "diag_minus_offdiag_null_std": float(diag_values.std()),
+    }
+
+
 def ridge_predict(
     x_train: np.ndarray,
     y_train: np.ndarray,
@@ -121,6 +159,8 @@ def main() -> None:
     parser.add_argument("--label", required=True)
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     parser.add_argument("--alphas", default="0.1,1,10,100,1000")
+    parser.add_argument("--n-permutations", type=int, default=5000)
+    parser.add_argument("--seed", type=int, default=33)
     args = parser.parse_args()
 
     fmri = np.load(args.fmri_npz, allow_pickle=True)
@@ -176,6 +216,7 @@ def main() -> None:
     test_target = yz[test_mask]
     real = retrieval_metrics(test_pred, test_target)
     shifted = retrieval_metrics(np.roll(test_pred, 1, axis=0), test_target)
+    perm_null = permutation_null(test_pred, test_target, args.n_permutations, args.seed)
     image_corr = corr_rows(test_pred, test_target)
     roi_corr = []
     for column in range(test_target.shape[1]):
@@ -196,6 +237,7 @@ def main() -> None:
         "val_metrics": best_val,
         "test_metrics": real,
         "shifted_metrics": shifted,
+        "permutation_null": perm_null,
         "test_minus_shifted_rank_percentile": float(
             real["rank_percentile"] - shifted["rank_percentile"]
         ),
