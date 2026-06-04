@@ -36,7 +36,6 @@ fi
   --feature-train "$TRAIN_FEATURE" \
   --feature-test "$TEST_FEATURE" \
   --tag "$RESIDUAL_TAG" \
-  --crossfit-folds 5 \
   --alphas 0.1,1,10,100,1000
 
 "$PY" fmri_foundation_workspace/scripts/train_atm_to_tribe_scaling.py \
