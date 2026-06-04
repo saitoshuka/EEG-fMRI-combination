@@ -92,10 +92,28 @@ the same EEG features and split but randomly permutes training fMRI targets.
 | mean | 0.6399 | 0.1431 | 0.2270 | 0.1716 | 0.0017 | 0.4976 | 0.0074 |
 | std | 0.0148 | 0.0343 | 0.0171 | 0.0237 | 0.0005 | 0.0068 | 0.0101 |
 
+### Raw EEG Temporal/Channel Ablation
+
+This ablation uses the same seed-33 1000-image heldout split as the raw waveform
+probe. It tests whether the real-fMRI prediction comes from plausible visual EEG
+structure rather than arbitrary pooled noise.
+
+| check | rank | interpretation |
+| --- | --- | --- |
+| full raw EEG | 0.6456 | main seed-33 baseline |
+| best 100 ms keep-window, 300-400ms | 0.6164 | strongest single-window prediction |
+| drop 300-400ms | 0.6342 | most damaging window removal; full EEG has redundant windows |
+| keep posterior P/PO/O channels only | 0.6744 | posterior channels outperform full EEG |
+| keep nonposterior channels only | 0.6112 | nonposterior signal remains but is weaker |
+| top single channel, Oz | 0.6242 | strongest individual sensor is occipital/posterior |
+
+Top single channels are posterior-dominant: Oz, P8, P6, TP8, PO8, O2, P7, O1, P5, PO7. The detailed report is `fmri_foundation_workspace/notes/eeg_image_bridge/raw_eeg_realfmri_temporal_channel_ablation_20260604.md`.
+
 ## Current Interpretation
 
 1. The raw TRIBE/parcel38 teacher aligns strongly with real THINGS-fMRI on heldout exact images. It is stronger than direct V-JEPA2 and slightly stronger than CLIP in rank, although CLIP has stronger top5 and ROI-wise correlation in some views.
 2. The signal is concentrated in curated visual ROIs. Nonvisual/uncurated ROI performance is weak, which supports a stimulus-visual interpretation rather than a global artifact.
 3. CLIP-residual teacher signal is not robust in all ROI207, but shows visual-family structure. This means residual claims should be phrased narrowly and validated by ROI family, not by all-ROI averages.
-4. EEG-predicted ROI outputs from the current ROI-query deep model show only a weak trend on the 77 exact test images. However, the larger 1000-image overlap probe shows that averaged raw EEG waveform features can predict real fMRI visual-family patterns well above shuffled controls, and this holds across multiple random heldout seeds. This changes the bottleneck diagnosis: EEG is not pure noise; the current end-to-end ROI-query route is not yet extracting the full available signal.
-5. For an AAAI-level story, the current strongest direction is to turn the raw EEG->real fMRI heldout signal into a trainable model result, then show that cortical/ROI supervision improves visual decoding or interpretability under strict image-heldout splits.
+4. EEG-predicted ROI outputs from the current ROI-query deep model show only a weak trend on the 77 exact test images. However, the larger 1000-image overlap probe shows that averaged raw EEG waveform features can predict real fMRI visual-family patterns well above shuffled controls, and this holds across multiple random heldout seeds.
+5. The raw EEG signal has plausible temporal/channel structure: 300-400 ms is the strongest single 100 ms window, and posterior P/PO/O channels outperform full EEG. This changes the bottleneck diagnosis: EEG is not pure noise; the current end-to-end ROI-query route is not yet extracting the full available signal.
+6. For an AAAI-level story, the current strongest direction is to turn the raw EEG->real fMRI heldout signal into a trainable model result, then show that cortical/ROI supervision improves visual decoding or interpretability under strict image-heldout splits.

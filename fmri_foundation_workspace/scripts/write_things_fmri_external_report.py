@@ -95,6 +95,9 @@ def main() -> None:
     raw_eeg_summary_path = (
         args.external_dir / "raw_eeg_to_realfmri_overlap_holdout" / "summary.json"
     )
+    raw_eeg_ablation_summary_path = (
+        args.external_dir / "raw_eeg_temporal_channel_ablation_seed33" / "summary.json"
+    )
     image_holdout_summary_path = (
         args.external_dir / "image_features_to_realfmri_overlap_holdout" / "summary.json"
     )
@@ -236,6 +239,49 @@ def main() -> None:
         multiseed_rows.append({"seed": "mean", **numeric.mean().to_dict()})
         multiseed_rows.append({"seed": "std", **numeric.std(ddof=1).to_dict()})
     multiseed = pd.DataFrame(multiseed_rows)
+    ablation_rows = []
+    ablation_text = "Not run yet."
+    if raw_eeg_ablation_summary_path.exists():
+        ablation = json.loads(raw_eeg_ablation_summary_path.read_text())
+        ablation_rows = [
+            {
+                "check": "full raw EEG",
+                "rank": ablation["full_all_visual_rank"],
+                "interpretation": "main seed-33 baseline",
+            },
+            {
+                "check": f"best 100 ms keep-window, {ablation['best_keep_time']['window']}",
+                "rank": ablation["best_keep_time"]["rank"],
+                "interpretation": "strongest single-window prediction",
+            },
+            {
+                "check": f"drop {ablation['most_important_drop_time']['window']}",
+                "rank": ablation["most_important_drop_time"]["rank"],
+                "interpretation": "most damaging window removal; full EEG has redundant windows",
+            },
+            {
+                "check": "keep posterior P/PO/O channels only",
+                "rank": ablation["keep_posterior_P_PO_O_rank"],
+                "interpretation": "posterior channels outperform full EEG",
+            },
+            {
+                "check": "keep nonposterior channels only",
+                "rank": ablation["keep_nonposterior_rank"],
+                "interpretation": "nonposterior signal remains but is weaker",
+            },
+            {
+                "check": f"top single channel, {ablation['top_single_channels'][0]['channel']}",
+                "rank": ablation["top_single_channels"][0]["rank"],
+                "interpretation": "strongest individual sensor is occipital/posterior",
+            },
+        ]
+        top_channels = ", ".join(item["channel"] for item in ablation["top_single_channels"])
+        ablation_text = (
+            markdown_table(pd.DataFrame(ablation_rows), ["check", "rank", "interpretation"])
+            + "\n\nTop single channels are posterior-dominant: "
+            + top_channels
+            + ". The detailed report is `fmri_foundation_workspace/notes/eeg_image_bridge/raw_eeg_realfmri_temporal_channel_ablation_20260604.md`."
+        )
 
     text = f"""# THINGS-fMRI External Validation Results
 
@@ -273,13 +319,22 @@ the same EEG features and split but randomly permutes training fMRI targets.
 
 {markdown_table(multiseed, ['seed', 'visual_rank', 'visual_delta', 'visual_corr', 'visual_roi_corr', 'visual_p', 'shuffle_rank', 'shuffle_corr']) if len(multiseed_rows) else 'Not run yet.'}
 
+### Raw EEG Temporal/Channel Ablation
+
+This ablation uses the same seed-33 1000-image heldout split as the raw waveform
+probe. It tests whether the real-fMRI prediction comes from plausible visual EEG
+structure rather than arbitrary pooled noise.
+
+{ablation_text}
+
 ## Current Interpretation
 
 1. The raw TRIBE/parcel38 teacher aligns strongly with real THINGS-fMRI on heldout exact images. It is stronger than direct V-JEPA2 and slightly stronger than CLIP in rank, although CLIP has stronger top5 and ROI-wise correlation in some views.
 2. The signal is concentrated in curated visual ROIs. Nonvisual/uncurated ROI performance is weak, which supports a stimulus-visual interpretation rather than a global artifact.
 3. CLIP-residual teacher signal is not robust in all ROI207, but shows visual-family structure. This means residual claims should be phrased narrowly and validated by ROI family, not by all-ROI averages.
-4. EEG-predicted ROI outputs from the current ROI-query deep model show only a weak trend on the 77 exact test images. However, the larger 1000-image overlap probe shows that averaged raw EEG waveform features can predict real fMRI visual-family patterns well above shuffled controls, and this holds across multiple random heldout seeds. This changes the bottleneck diagnosis: EEG is not pure noise; the current end-to-end ROI-query route is not yet extracting the full available signal.
-5. For an AAAI-level story, the current strongest direction is to turn the raw EEG->real fMRI heldout signal into a trainable model result, then show that cortical/ROI supervision improves visual decoding or interpretability under strict image-heldout splits.
+4. EEG-predicted ROI outputs from the current ROI-query deep model show only a weak trend on the 77 exact test images. However, the larger 1000-image overlap probe shows that averaged raw EEG waveform features can predict real fMRI visual-family patterns well above shuffled controls, and this holds across multiple random heldout seeds.
+5. The raw EEG signal has plausible temporal/channel structure: 300-400 ms is the strongest single 100 ms window, and posterior P/PO/O channels outperform full EEG. This changes the bottleneck diagnosis: EEG is not pure noise; the current end-to-end ROI-query route is not yet extracting the full available signal.
+6. For an AAAI-level story, the current strongest direction is to turn the raw EEG->real fMRI heldout signal into a trainable model result, then show that cortical/ROI supervision improves visual decoding or interpretability under strict image-heldout splits.
 """
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(text, encoding="utf-8")
