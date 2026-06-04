@@ -646,6 +646,51 @@ def main() -> None:
         ]
         if row is not None
     ]
+    query_seed_rows = []
+    for seed in ["33", "11"]:
+        for head, dirname in [
+            (
+                "query",
+                f"atm_spatial_parcel_raw_strongroi_train_seed{seed}_budget16540_n16540_d256_none_lam010_col001_sp010",
+            ),
+            (
+                "pooled",
+                f"atm_spatial_pooled_parcel_raw_strongroi_train_seed{seed}_budget16540_n16540_d256_none_lam010_col001_sp010",
+            ),
+        ]:
+            path = args.external_dir.parent / "atm_roi_spatial_branch" / dirname / "summary.json"
+            if not path.exists():
+                continue
+            payload = json.loads(path.read_text())
+            rows = payload["rows"]
+            out = {
+                "seed": seed,
+                "head": head,
+                "best_clip_top1": max(row["clip_top1"] for row in rows),
+                "final_clip_top1": rows[-1]["clip_top1"],
+                "best_clip_top5": max(row["clip_top5"] for row in rows),
+                "final_clip_top5": rows[-1]["clip_top5"],
+                "best_roi_rank": max(row["roi_rank_percentile"] for row in rows),
+                "final_roi_rank": rows[-1]["roi_rank_percentile"],
+            }
+            query_seed_rows.append(out)
+    query_seed_text = (
+        markdown_table(
+            pd.DataFrame(query_seed_rows),
+            [
+                "seed",
+                "head",
+                "best_clip_top1",
+                "final_clip_top1",
+                "best_clip_top5",
+                "final_clip_top5",
+                "best_roi_rank",
+                "final_roi_rank",
+            ],
+        )
+        if query_seed_rows
+        else "Not run yet."
+    )
     query_control_text = (
         markdown_table(
             pd.DataFrame(query_control_rows),
@@ -781,6 +826,17 @@ query-time/channel maps, and cortical surface visualization. Therefore the
 query branch should be claimed as a structured interpretability mechanism unless
 future validation-selected runs show a consistent performance advantage.
 
+#### Query-vs-Pooled Seed Stability
+
+{query_seed_text}
+
+Interpretation: across the two checked seeds, query and pooled heads are very
+close. Seed 33 favors pooled slightly on ROI rank but query on CLIP retrieval;
+seed 11 favors query slightly on both. This supports the conservative claim that
+ordered queries are competitive and interpretability-preserving, but it is not
+yet enough to claim a robust scalar-performance advantage over pooled ROI
+prediction.
+
 ## Current Interpretation
 
 1. The full-surface TRIBE teacher aligns strongly with real THINGS-fMRI on same-image heldout tests after train-only calibration, especially in visual ROI families. This supports using TRIBE as a pseudo-cortical teacher, while still requiring cautious language because the evaluation uses a learned calibration into THINGS-fMRI ROI space.
@@ -792,7 +848,7 @@ future validation-selected runs show a consistent performance advantage.
 7. A small trainable factorized-query model predicts real visual-fMRI targets above shifted/shuffled controls across four heldout seeds. Mean rank is slightly above the full-channel ridge baseline (0.6461 vs 0.6399), but the margin is modest and not monotonic across seeds; this is a promising interpretable model result, not yet a final SOTA claim.
 8. In raw-ridge image retrieval, V-JEPA2 and CLIP+V-JEPA2 are stronger semantic target spaces than CLIP alone on the overlap split. This should remain a diagnostic target-space result, not the main architecture baseline.
 9. In the ATM-aligned retrieval check, TRIBE cortical reranking improves the frozen ATM baseline on the 200-image test set, with shifted/permutation-null reranking clearly lower. Test-split CV shows a consistent small heldout trend, but the train-image validation route is invalid because training-image retrieval is nearly saturated and selects no rerank. This keeps the rerank result promising but not final.
-10. The ROI-query constraint does not currently beat the no-query pooled ROI head on ROI rank. It should not be sold as the reason scalar ROI prediction works; its current value is ordered ROI identity and query-specific interpretability.
+10. The ROI-query constraint is competitive with a no-query pooled ROI head across two seeds, but does not yet show a stable scalar-performance advantage. It should not be sold as the sole reason ROI prediction works; its current strongest value is ordered ROI identity and query-specific interpretability.
 11. For an AAAI-level story, the current strongest direction is to stabilize the ATM ROI-query branch and query/time/channel interpretability across seeds, then test whether the cortical branch improves generated-image quality or provides stronger cortical maps at larger/finer ROI resolution.
 """
     args.out.parent.mkdir(parents=True, exist_ok=True)

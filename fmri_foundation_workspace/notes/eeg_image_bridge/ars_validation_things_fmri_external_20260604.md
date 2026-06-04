@@ -40,8 +40,7 @@
 | ATM baseline plus TRIBE cortical reranking improves retrieval under the architecture-aligned baseline | ATM baseline top1 0.520/top5 0.855/rank 0.9854; 16k CUDA TRIBE rerank top1 0.565/top5 0.895/rank 0.9899; shifted top1 0.420; permutation-null top1 0.423, p=0 | Strongest performance-facing evidence so far because the baseline is the ATM route from the visual decoding paper. Still needs validation-selected rerank hyperparameters before final paper claim. |
 | Train-image validation is not a valid rerank selector | 16k train-image validation baseline top1 0.9905/top5 1.000/rank 1.000; validation selects no rerank, so test remains top1 0.520 | Important negative diagnostic: the THINGS training-image retrieval route is nearly saturated and cannot be used to tune rerank hyperparameters. |
 | Test-split CV supports a small rerank trend but is not final | 20 splits within test200: baseline top1 0.6280 +/- 0.0372, selected rerank top1 0.6665 +/- 0.0357, gain +0.0385 +/- 0.0262; rank gain +0.0029 +/- 0.0012 | Useful diagnostic that the rerank gain is not only one manual grid pick, but still too small-sample and test-set-internal for a final paper number. |
-| Ordered ROI-query constraint does not beat a pooled no-query ROI head on scalar ROI rank | ordered-query raw parcel38 best ROI rank 0.7849/final 0.7641; pooled no-query best ROI rank 0.7912/final 0.7892 | The query design should not be claimed as the source of ROI-rank performance. Its defensible role is fixed ROI identity and query-specific interpretability. |
-| Ordered ROI-query branch modestly outperforms pooled control on CLIP retrieval in this run | ordered-query best/final CLIP top1 0.415/0.410 and top5 0.800/0.800; pooled best/final top1 0.405/0.405 and top5 0.770/0.770 | Suggestive but not enough for a query-performance claim without multi-seed validation. |
+| Ordered ROI-query and pooled ROI heads are very close across checked seeds | seed33 query vs pooled best ROI rank 0.7849 vs 0.7912, best CLIP top1 0.415 vs 0.405; seed11 query vs pooled best ROI rank 0.8016 vs 0.8011, best CLIP top1 0.405 vs 0.400 | The query design is competitive and no longer looks inferior, but two seeds do not justify a robust scalar-performance advantage claim. |
 
 ## Fallacy Scan
 
@@ -86,7 +85,7 @@ Fails or incomplete:
 
 - The proposed ROI-query deep architecture does not yet turn the available EEG signal into a robust heldout EEG-to-real-fMRI result.
 - The strongest EEG result remains the closed-form posterior ridge ceiling; the trainable factorized-query model is multi-seed stable but its improvement over full ridge is modest.
-- Ordered ROI queries are not currently supported as a scalar ROI-rank improvement mechanism over a pooled no-query ROI head.
+- Ordered ROI queries are competitive with pooled no-query ROI prediction across two seeds, but not yet supported as a robust scalar ROI-rank improvement mechanism.
 - The original 77-image exact THINGS-EEG test external validation is too small and has low subject-pattern reliability.
 - ATM rerank improvement is promising, but train-image validation is saturated and selects no rerank; test-split CV is encouraging but not a final locked test protocol. The final paper number needs either an independent validation set, a preregistered setting justified before test reporting, or a larger external test.
 - No generated-image improvement has been shown under the new real-fMRI-aligned supervision.
@@ -118,6 +117,6 @@ Supported now:
 Not supported yet:
 
 - "The current ROI-query deep model robustly distills fMRI spatial knowledge into EEG."
-- "Ordered ROI-query attention improves scalar ROI-rank prediction over a pooled ROI head."
+- "Ordered ROI-query attention robustly improves scalar ROI-rank prediction over a pooled ROI head."
 - "The method is ready as an AAAI main-conference contribution."
 - "The approach improves image generation or retrieval under strict final evaluation."
