@@ -31,8 +31,8 @@ from evaluate_atm_roi_temporal_hierarchy import load_roi_payload, roi_group_indi
 from train_atm_roi_spatial_branch import (  # noqa: E402
     AtmSemanticSpatial,
     load_or_build_test_eeg_stack,
+    roi_query_features,
     subject_to_id,
-    visual_group_features,
 )
 
 
@@ -65,7 +65,14 @@ def load_channel_names(data_root: Path, subject: str) -> list[str]:
 
 def build_model(summary: dict, roi_payload: dict[str, object], device: torch.device) -> AtmSemanticSpatial:
     visual_json = json.dumps(roi_payload["visual_group_json"]) if roi_payload["visual_group_json"] else None
-    group_features = visual_group_features(roi_payload["names"], visual_json)  # type: ignore[arg-type]
+    metadata = summary.get("prototype_metadata_roi") or None
+    metadata_path = resolve_path(metadata) if metadata else None
+    group_features = roi_query_features(
+        roi_payload["names"],  # type: ignore[arg-type]
+        visual_json,
+        feature_mode=summary.get("roi_feature_mode", "group"),
+        prototype_metadata_roi=metadata_path,
+    )
     return AtmSemanticSpatial(
         roi_names=roi_payload["names"],  # type: ignore[arg-type]
         vertex_counts=roi_payload["vertex_counts"],  # type: ignore[arg-type]

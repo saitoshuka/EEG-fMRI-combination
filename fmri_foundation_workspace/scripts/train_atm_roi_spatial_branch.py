@@ -298,6 +298,47 @@ def visual_group_features(names: np.ndarray, visual_group_json: str | None) -> t
     return features
 
 
+def prototype_centroid_features(names: np.ndarray, metadata_roi: Path | None) -> torch.Tensor:
+    if metadata_roi is None:
+        raise ValueError("roi_feature_mode requires --prototype-metadata-roi with prototype metadata")
+    payload = np.load(metadata_roi, allow_pickle=True)
+    if "prototype_metadata_json" not in payload.files:
+        raise ValueError(f"Missing prototype_metadata_json in {metadata_roi}")
+    metadata = json.loads(str(payload["prototype_metadata_json"].item()))
+    centroids = np.asarray(metadata["centroids"], dtype="float32")
+    meta_names = payload["parcel_names"].astype(str)
+    if len(centroids) != len(meta_names):
+        raise ValueError(f"Centroid/name mismatch in {metadata_roi}: {len(centroids)} vs {len(meta_names)}")
+    by_name = {name: centroids[idx] for idx, name in enumerate(meta_names)}
+    coords = []
+    for name in names.astype(str):
+        if name not in by_name:
+            raise ValueError(f"ROI {name} not found in prototype metadata {metadata_roi}")
+        coords.append(by_name[name])
+    coord_arr = np.asarray(coords, dtype="float32")
+    coord_arr = (coord_arr - coord_arr.mean(axis=0, keepdims=True)) / (coord_arr.std(axis=0, keepdims=True) + 1e-6)
+    radius = np.linalg.norm(coord_arr, axis=1, keepdims=True)
+    radius = (radius - radius.mean(axis=0, keepdims=True)) / (radius.std(axis=0, keepdims=True) + 1e-6)
+    return torch.from_numpy(np.concatenate([coord_arr, radius], axis=1).astype("float32"))
+
+
+def roi_query_features(
+    names: np.ndarray,
+    visual_group_json: str | None,
+    feature_mode: str = "group",
+    prototype_metadata_roi: Path | None = None,
+) -> torch.Tensor:
+    group = visual_group_features(names, visual_group_json)
+    if feature_mode == "group":
+        return group
+    coord = prototype_centroid_features(names, prototype_metadata_roi)
+    if feature_mode == "coord":
+        return coord
+    if feature_mode == "group_coord":
+        return torch.cat([group, coord], dim=1)
+    raise ValueError(f"Unknown roi_feature_mode: {feature_mode}")
+
+
 class OrderedRoiQueryBranch(nn.Module):
     """Fixed-order atlas ROI queries attending over ATM channel tokens."""
 
@@ -791,6 +832,8 @@ def main() -> int:
     parser.add_argument("--subject-mode", choices=["token", "none"], default="token")
     parser.add_argument("--semantic-head", choices=["shallow", "attn"], default="shallow")
     parser.add_argument("--spatial-head", choices=["query", "pooled"], default="query")
+    parser.add_argument("--roi-feature-mode", choices=["group", "coord", "group_coord"], default="group")
+    parser.add_argument("--prototype-metadata-roi", type=Path, default=None)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     parser.add_argument("--tag", default="")
@@ -818,7 +861,12 @@ def main() -> int:
         if "visual_group_json" in train_roi_npz.files
         else None
     )
-    group_features = visual_group_features(roi_names, visual_group_json)
+    group_features = roi_query_features(
+        roi_names,
+        visual_group_json,
+        feature_mode=args.roi_feature_mode,
+        prototype_metadata_roi=args.prototype_metadata_roi,
+    )
 
     clip_train_all = torch.load(args.image_root / "ViT-H-14_features_train.pt", map_location="cpu", weights_only=False)[
         "img_features"
@@ -1016,6 +1064,8 @@ def main() -> int:
                 "subject_mode": args.subject_mode,
                 "semantic_head": args.semantic_head,
                 "spatial_head": args.spatial_head if args.mode == "spatial" else "none",
+                "roi_feature_mode": args.roi_feature_mode,
+                "prototype_metadata_roi": str(args.prototype_metadata_roi) if args.prototype_metadata_roi else "",
                 "seed": args.seed,
                 "ordered_roi_supervision": args.mode == "spatial",
                 "ordered_roi_query_attention": args.mode == "spatial" and args.spatial_head == "query",

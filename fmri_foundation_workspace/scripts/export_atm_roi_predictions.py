@@ -20,15 +20,27 @@ from train_atm_roi_spatial_branch import (
     IMAGE_ROOT,
     AtmSemanticSpatial,
     load_or_build_test_eeg_stack,
+    roi_query_features,
     subject_to_id,
-    visual_group_features,
 )
 
 
 WORKSPACE = Path(__file__).resolve().parents[1]
+ROOT = WORKSPACE.parent
 DEFAULT_OUT_DIR = (
     WORKSPACE / "results" / "eeg_image_bridge" / "things_fmri_external_validation"
 )
+
+
+def resolve_path(path: str | Path) -> Path:
+    p = Path(path)
+    if p.is_absolute():
+        return p
+    for base in (ROOT, WORKSPACE):
+        candidate = base / p
+        if candidate.exists():
+            return candidate
+    return ROOT / p
 
 
 def main() -> None:
@@ -51,7 +63,7 @@ def main() -> None:
     if not summary_path.exists():
         raise FileNotFoundError(f"Missing model summary: {summary_path}")
     summary = json.loads(summary_path.read_text())
-    test_roi_path = args.test_roi or Path(summary["test_roi"])
+    test_roi_path = args.test_roi or resolve_path(summary["test_roi"])
     roi_kind = args.roi_kind or str(summary["roi_kind"])
     subjects = args.subjects or list(summary["subjects"])
     target_key = "group_targets" if roi_kind == "group" else "parcel_targets"
@@ -66,7 +78,14 @@ def main() -> None:
         if "visual_group_json" in test_roi_npz.files
         else None
     )
-    group_features = visual_group_features(roi_names, visual_group_json)
+    metadata = summary.get("prototype_metadata_roi") or None
+    metadata_path = resolve_path(metadata) if metadata else None
+    group_features = roi_query_features(
+        roi_names,
+        visual_group_json,
+        feature_mode=summary.get("roi_feature_mode", "group"),
+        prototype_metadata_roi=metadata_path,
+    )
     test_image_index = test_roi_npz["image_index"].astype(int)
 
     device = torch.device(args.device if torch.cuda.is_available() or args.device == "cpu" else "cpu")

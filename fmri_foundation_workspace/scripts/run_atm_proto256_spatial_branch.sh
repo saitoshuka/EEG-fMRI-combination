@@ -34,6 +34,8 @@ ATM_D_FF=${ATM_D_FF:-256}
 SUBJECT_MODE=${SUBJECT_MODE:-none}
 SEMANTIC_HEAD=${SEMANTIC_HEAD:-shallow}
 DEVICE=${DEVICE:-cuda}
+ROI_FEATURE_MODE=${ROI_FEATURE_MODE:-group}
+PROTOTYPE_METADATA_ROI=${PROTOTYPE_METADATA_ROI:-$RESULTS/cortical_prototype_targets/visualproto_k256_seed33/cortical_spatial_targets_train_n16540_k256.npz}
 
 if [[ "$TARGET_KIND" == "residual" ]]; then
   TARGET_DIR=$RESULTS/roi_semantic_residual/clip_vith14_plus_vjepa2_true_proto256_spatial_n16540
@@ -57,7 +59,7 @@ fi
 
 run_one() {
   local head=$1
-  local tag=${TAG:-atm_${head}_proto256_${TARGET_KIND}_seed${SEED}_n16540_d256_none_lam${LAMBDA_ROI//./}_col${LAMBDA_ROI_COL//./}_sp${LAMBDA_SPATIAL//./}}
+  local tag=${TAG:-atm_${head}_proto256_${TARGET_KIND}_${ROI_FEATURE_MODE}_seed${SEED}_n16540_d256_none_lam${LAMBDA_ROI//./}_col${LAMBDA_ROI_COL//./}_sp${LAMBDA_SPATIAL//./}}
   local run_dir="$OUT_DIR/$tag"
   local log_file="$LOG_DIR/${tag}.log"
   if [[ -s "$run_dir/summary.json" && -s "$run_dir/model.pt" ]]; then
@@ -91,6 +93,8 @@ run_one() {
     --atm-d-ff "$ATM_D_FF" \
     --subject-mode "$SUBJECT_MODE" \
     --semantic-head "$SEMANTIC_HEAD" \
+    --roi-feature-mode "$ROI_FEATURE_MODE" \
+    --prototype-metadata-roi "$PROTOTYPE_METADATA_ROI" \
     --device "$DEVICE" \
     --out-dir "$OUT_DIR" \
     --tag "$tag" \
