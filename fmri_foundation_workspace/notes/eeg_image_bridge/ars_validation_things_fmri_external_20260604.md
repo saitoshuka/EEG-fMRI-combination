@@ -28,6 +28,9 @@
 | Signal is visual-family concentrated | raw EEG visual-family rank 0.6456 vs nonvisual rank 0.5165 | Supports a visual neuroscience interpretation rather than an all-brain/global shortcut. |
 | Raw EEG overlap finding is stable over heldout seeds | 4-seed visual-family rank mean 0.6399, std 0.0148; shuffle rank mean 0.4976 | Strengthens the result beyond one favorable split. |
 | Raw EEG signal has plausible temporal/channel structure | best 100 ms keep-window 300-400 ms rank 0.6164; posterior P/PO/O-only rank 0.6744 vs nonposterior-only 0.6112; top single channel Oz rank 0.6242 | Supports a visual-evoked interpretation and motivates channel-aware trainable models. |
+| ROI-family timing shows a limited visual hierarchy trend | early_visual best keep 100-200 ms; mid/ventral/all-visual best keep 300-400 ms | Useful neuroscience-facing evidence, but not a clean feed-forward latency cascade. |
+| Trainable factorized-query model predicts real visual fMRI | posterior factorized query rank 0.6604 vs shifted 0.4764; full-ridge reference 0.6456; posterior-ridge ceiling 0.6744 | A promising trainable ordered-query result; still below the strongest closed-form posterior ridge. |
+| Trainable factorized-query is stable over heldout seeds | 4-seed rank mean 0.6461, shifted mean 0.4937, full-ridge mean 0.6399 | Stable above null, modestly above full-ridge on average, but not a large performance jump. |
 
 ## Fallacy Scan
 
@@ -58,21 +61,24 @@ Passes:
 - Raw EEG waveform baseline predicts real fMRI visual-family targets on a 1000-image heldout split, with a fit-target shuffle control near chance.
 - The raw EEG heldout effect is stable across four random seeds.
 - A temporal/channel ablation shows plausible visual EEG structure: 300-400 ms is the strongest 100 ms keep-window, and posterior P/PO/O channels outperform full EEG.
+- ROI-family time analysis shows early_visual peaking earlier (100-200 ms) than mid/ventral/all-visual families (300-400 ms), supporting a modest visual hierarchy story.
+- A small trainable factorized-query readout now beats full-channel ridge and MLP/linear trainable baselines on the seed-33 heldout split.
+- The factorized-query readout remains above shifted/shuffled controls across four heldout seeds, with a small mean improvement over full-channel ridge.
 - CLIP/V-JEPA controls were run, preventing an overclaim that TRIBE is uniquely fMRI-like.
 
 Fails or incomplete:
 
 - The proposed ROI-query deep architecture does not yet turn the available EEG signal into a robust heldout EEG-to-real-fMRI result.
-- The strongest EEG result is currently a ridge baseline on image-averaged EEG, not the final trainable cortical distillation model.
+- The strongest EEG result remains the closed-form posterior ridge ceiling; the trainable factorized-query model is multi-seed stable but its improvement over full ridge is modest.
 - The original 77-image exact THINGS-EEG test external validation is too small and has low subject-pattern reliability.
 - No final image retrieval or generation improvement has been shown under the new real-fMRI-aligned supervision.
 - ROI family definitions are curated and must be justified or replaced by atlas-defined visual masks in the final paper.
 
 ## Required Next Experiments
 
-1. Train a small raw-waveform neural model on the same overlap split and test whether ROI-query/cortical supervision beats ridge or at least matches it with interpretable time/channel/ROI structure.
+1. Run temporal/channel/ROI-family weight and ablation analysis for the best trainable model across seeds if this becomes a central claim.
 2. Repeat image-feature ceilings over the same multi-seed splits or freeze seed 33 as the final protocol with a clear rationale.
-3. Run temporal/channel ablations over additional heldout seeds if this becomes a central claim; current seed-33 ablation is strong enough for model-selection but not final statistical proof.
+3. Test whether the factorized-query cortical branch improves or preserves THINGS image retrieval/generation when added to the existing semantic EEG route.
 4. Freeze the split/protocol, then run a final statistical correction or clearly label ROI-family tests as exploratory.
 5. Only after the strict overlap protocol is stable, reconnect the best cortical branch to visual decoding/generation and measure whether it improves or at least preserves retrieval while adding cortical interpretability.
 
@@ -83,6 +89,7 @@ Supported now:
 - "Stimulus-derived cortical teachers align with real image-evoked fMRI, especially in visual ROIs."
 - "Averaged visual EEG contains a measurable signal for predicting real fMRI visual-family patterns under image-heldout evaluation."
 - "The raw EEG signal has plausible visual temporal/channel structure under the overlap heldout protocol."
+- "A trainable ordered-query readout can extract this signal across multiple image-heldout splits, with modest average improvement over full-channel ridge and strong improvement over shifted/shuffled controls."
 
 Not supported yet:
 

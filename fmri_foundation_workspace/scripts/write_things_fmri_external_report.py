@@ -98,6 +98,10 @@ def main() -> None:
     raw_eeg_ablation_summary_path = (
         args.external_dir / "raw_eeg_temporal_channel_ablation_seed33" / "summary.json"
     )
+    raw_eeg_time_hierarchy_path = (
+        args.external_dir / "raw_eeg_temporal_channel_ablation_seed33" / "time_hierarchy_summary.json"
+    )
+    trainable_multiseed_path = args.external_dir / "raw_eeg_factorized_query_multiseed_summary.json"
     image_holdout_summary_path = (
         args.external_dir / "image_features_to_realfmri_overlap_holdout" / "summary.json"
     )
@@ -282,6 +286,93 @@ def main() -> None:
             + top_channels
             + ". The detailed report is `fmri_foundation_workspace/notes/eeg_image_bridge/raw_eeg_realfmri_temporal_channel_ablation_20260604.md`."
         )
+    hierarchy_text = "Not run yet."
+    if raw_eeg_time_hierarchy_path.exists():
+        hierarchy = json.loads(raw_eeg_time_hierarchy_path.read_text())
+        hierarchy_rows = [
+            {
+                "family": row["family"],
+                "full_rank": row["full_rank"],
+                "best_keep": row["best_keep"],
+                "best_keep_rank": row["best_keep_rank"],
+                "most_damaging_drop": row["most_damaging_drop"],
+                "drop_from_full": row["drop_from_full"],
+            }
+            for row in hierarchy
+            if row["family"] in {"early_visual", "mid_visual", "ventral_category_high", "all_visual_curated", "nonvisual_or_uncurated"}
+        ]
+        hierarchy_text = (
+            markdown_table(
+                pd.DataFrame(hierarchy_rows),
+                ["family", "full_rank", "best_keep", "best_keep_rank", "most_damaging_drop", "drop_from_full"],
+            )
+            + "\n\nInterpretation: early visual peaks earlier in the keep-window analysis (100-200 ms), while mid/ventral/all-visual families peak at 300-400 ms. This supports a plausible post-stimulus visual hierarchy trend, but not a perfectly clean feed-forward latency cascade."
+        )
+
+    trainable_rows = [
+        {
+            "model": "ridge full EEG reference",
+            "rank": 0.6455975975975975,
+            "shifted": "",
+            "delta": "",
+            "image_corr": "",
+            "roi_corr": "",
+            "note": "closed-form ridge, all channels",
+        },
+        {
+            "model": "ridge posterior P/PO/O reference",
+            "rank": 0.6743723723723725,
+            "shifted": "",
+            "delta": "",
+            "image_corr": "",
+            "roi_corr": "",
+            "note": "closed-form ridge, posterior channels",
+        },
+    ]
+    for model_dir, label in [
+        ("raw_eeg_mlp_model_seed33", "MLP posterior"),
+        ("raw_eeg_linear_model_seed33", "linear posterior"),
+        ("raw_eeg_factorized_query_model_seed33", "factorized query posterior d128"),
+        ("raw_eeg_factorized_query_d256_model_seed33", "factorized query posterior d256"),
+    ]:
+        summary_files = sorted((args.external_dir / model_dir).glob("*_summary.json"))
+        if not summary_files:
+            continue
+        summary = json.loads(summary_files[0].read_text())
+        metrics = summary["holdout_metrics"]
+        trainable_rows.append(
+            {
+                "model": label,
+                "rank": metrics["rank"],
+                "shifted": metrics["shifted"],
+                "delta": metrics["delta"],
+                "image_corr": metrics["image_corr"],
+                "roi_corr": metrics["roi_corr"],
+                "note": f"best epoch {summary['best_epoch']}",
+            }
+        )
+    trainable_text = markdown_table(
+        pd.DataFrame(trainable_rows),
+        ["model", "rank", "shifted", "delta", "image_corr", "roi_corr", "note"],
+    )
+    trainable_multiseed_text = "Not run yet."
+    if trainable_multiseed_path.exists():
+        payload = json.loads(trainable_multiseed_path.read_text())
+        rows = payload["rows"] + [payload["mean"], payload["std"]]
+        trainable_multiseed_text = markdown_table(
+            pd.DataFrame(rows),
+            [
+                "seed",
+                "ridge_rank",
+                "factorized_rank",
+                "factorized_shifted",
+                "factorized_delta",
+                "factorized_image_corr",
+                "factorized_roi_corr",
+                "factorized_minus_ridge",
+                "shuffle_rank",
+            ],
+        )
 
     text = f"""# THINGS-fMRI External Validation Results
 
@@ -327,6 +418,23 @@ structure rather than arbitrary pooled noise.
 
 {ablation_text}
 
+### ROI-Family Time Hierarchy
+
+{hierarchy_text}
+
+### Trainable EEG -> Real-fMRI Models
+
+These models use the same seed-33 overlap split and predict real THINGS-fMRI
+visual-family ROI targets from image-averaged EEG. The current best trainable
+model is a low-rank ordered-query linear readout over posterior channel-time
+tokens.
+
+{trainable_text}
+
+#### Factorized Query Multi-Seed
+
+{trainable_multiseed_text}
+
 ## Current Interpretation
 
 1. The raw TRIBE/parcel38 teacher aligns strongly with real THINGS-fMRI on heldout exact images. It is stronger than direct V-JEPA2 and slightly stronger than CLIP in rank, although CLIP has stronger top5 and ROI-wise correlation in some views.
@@ -334,7 +442,8 @@ structure rather than arbitrary pooled noise.
 3. CLIP-residual teacher signal is not robust in all ROI207, but shows visual-family structure. This means residual claims should be phrased narrowly and validated by ROI family, not by all-ROI averages.
 4. EEG-predicted ROI outputs from the current ROI-query deep model show only a weak trend on the 77 exact test images. However, the larger 1000-image overlap probe shows that averaged raw EEG waveform features can predict real fMRI visual-family patterns well above shuffled controls, and this holds across multiple random heldout seeds.
 5. The raw EEG signal has plausible temporal/channel structure: 300-400 ms is the strongest single 100 ms window, and posterior P/PO/O channels outperform full EEG. This changes the bottleneck diagnosis: EEG is not pure noise; the current end-to-end ROI-query route is not yet extracting the full available signal.
-6. For an AAAI-level story, the current strongest direction is to turn the raw EEG->real fMRI heldout signal into a trainable model result, then show that cortical/ROI supervision improves visual decoding or interpretability under strict image-heldout splits.
+6. A small trainable factorized-query model predicts real visual-fMRI targets above shifted/shuffled controls across four heldout seeds. Mean rank is slightly above the full-channel ridge baseline (0.6461 vs 0.6399), but the margin is modest and not monotonic across seeds; this is a promising interpretable model result, not yet a final SOTA claim.
+7. For an AAAI-level story, the current strongest direction is to stabilize the query/time/channel interpretability across seeds and reconnect the best cortical branch to image retrieval/generation.
 """
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(text, encoding="utf-8")

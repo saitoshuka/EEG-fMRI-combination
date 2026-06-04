@@ -109,6 +109,45 @@ structure rather than arbitrary pooled noise.
 
 Top single channels are posterior-dominant: Oz, P8, P6, TP8, PO8, O2, P7, O1, P5, PO7. The detailed report is `fmri_foundation_workspace/notes/eeg_image_bridge/raw_eeg_realfmri_temporal_channel_ablation_20260604.md`.
 
+### ROI-Family Time Hierarchy
+
+| family | full_rank | best_keep | best_keep_rank | most_damaging_drop | drop_from_full |
+| --- | --- | --- | --- | --- | --- |
+| early_visual | 0.5540 | 100-200ms | 0.5693 | 800-900ms | 0.0003 |
+| mid_visual | 0.6180 | 300-400ms | 0.5932 | 300-400ms | 0.0168 |
+| ventral_category_high | 0.6365 | 300-400ms | 0.6081 | 300-400ms | 0.0078 |
+| all_visual_curated | 0.6456 | 300-400ms | 0.6164 | 300-400ms | 0.0114 |
+| nonvisual_or_uncurated | 0.5165 | 300-400ms | 0.5170 | 300-400ms | 0.0047 |
+
+Interpretation: early visual peaks earlier in the keep-window analysis (100-200 ms), while mid/ventral/all-visual families peak at 300-400 ms. This supports a plausible post-stimulus visual hierarchy trend, but not a perfectly clean feed-forward latency cascade.
+
+### Trainable EEG -> Real-fMRI Models
+
+These models use the same seed-33 overlap split and predict real THINGS-fMRI
+visual-family ROI targets from image-averaged EEG. The current best trainable
+model is a low-rank ordered-query linear readout over posterior channel-time
+tokens.
+
+| model | rank | shifted | delta | image_corr | roi_corr | note |
+| --- | --- | --- | --- | --- | --- | --- |
+| ridge full EEG reference | 0.6456 |  |  |  |  | closed-form ridge, all channels |
+| ridge posterior P/PO/O reference | 0.6744 |  |  |  |  | closed-form ridge, posterior channels |
+| MLP posterior | 0.6562 | 0.4787 | 0.1775 | 0.2131 | 0.1757 | best epoch 1 |
+| linear posterior | 0.6545 | 0.4796 | 0.1749 | 0.1684 | 0.1523 | best epoch 3 |
+| factorized query posterior d128 | 0.6604 | 0.4764 | 0.1840 | 0.2473 | 0.1990 | best epoch 4 |
+| factorized query posterior d256 | 0.6561 | 0.4772 | 0.1789 | 0.2461 | 0.2016 | best epoch 3 |
+
+#### Factorized Query Multi-Seed
+
+| seed | ridge_rank | factorized_rank | factorized_shifted | factorized_delta | factorized_image_corr | factorized_roi_corr | factorized_minus_ridge | shuffle_rank |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 33 | 0.6456 | 0.6604 | 0.4764 | 0.1840 | 0.2473 | 0.1990 | 0.0148 | 0.4933 |
+| 11 | 0.6256 | 0.6370 | 0.5022 | 0.1348 | 0.2288 | 0.1730 | 0.0113 | 0.4925 |
+| 77 | 0.6581 | 0.6495 | 0.4841 | 0.1654 | 0.2447 | 0.1982 | -0.0085 | 0.4972 |
+| 101 | 0.6305 | 0.6374 | 0.5123 | 0.1251 | 0.2217 | 0.1670 | 0.0069 | 0.5073 |
+| mean | 0.6399 | 0.6461 | 0.4937 | 0.1523 | 0.2356 | 0.1843 | 0.0061 | 0.4976 |
+| std | 0.0148 | 0.0112 | 0.0164 | 0.0272 | 0.0124 | 0.0167 | 0.0103 | 0.0068 |
+
 ## Current Interpretation
 
 1. The raw TRIBE/parcel38 teacher aligns strongly with real THINGS-fMRI on heldout exact images. It is stronger than direct V-JEPA2 and slightly stronger than CLIP in rank, although CLIP has stronger top5 and ROI-wise correlation in some views.
@@ -116,4 +155,5 @@ Top single channels are posterior-dominant: Oz, P8, P6, TP8, PO8, O2, P7, O1, P5
 3. CLIP-residual teacher signal is not robust in all ROI207, but shows visual-family structure. This means residual claims should be phrased narrowly and validated by ROI family, not by all-ROI averages.
 4. EEG-predicted ROI outputs from the current ROI-query deep model show only a weak trend on the 77 exact test images. However, the larger 1000-image overlap probe shows that averaged raw EEG waveform features can predict real fMRI visual-family patterns well above shuffled controls, and this holds across multiple random heldout seeds.
 5. The raw EEG signal has plausible temporal/channel structure: 300-400 ms is the strongest single 100 ms window, and posterior P/PO/O channels outperform full EEG. This changes the bottleneck diagnosis: EEG is not pure noise; the current end-to-end ROI-query route is not yet extracting the full available signal.
-6. For an AAAI-level story, the current strongest direction is to turn the raw EEG->real fMRI heldout signal into a trainable model result, then show that cortical/ROI supervision improves visual decoding or interpretability under strict image-heldout splits.
+6. A small trainable factorized-query model predicts real visual-fMRI targets above shifted/shuffled controls across four heldout seeds. Mean rank is slightly above the full-channel ridge baseline (0.6461 vs 0.6399), but the margin is modest and not monotonic across seeds; this is a promising interpretable model result, not yet a final SOTA claim.
+7. For an AAAI-level story, the current strongest direction is to stabilize the query/time/channel interpretability across seeds and reconnect the best cortical branch to image retrieval/generation.
