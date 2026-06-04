@@ -215,7 +215,30 @@ Relevant files:
 - `fmri_foundation_workspace/scripts/render_roi_query_time_surface_html.py`
 - `fmri_foundation_workspace/results/eeg_image_bridge/atm_roi_surface_time_maps/roi_query_time_surface_demo_report.md`
 
-### 6. Fine visual-surface prototype check
+### 6. Real-fMRI visual64 interpretability check
+
+The direct THINGS-fMRI validation uses real measured fMRI visual ROI activity,
+not TRIBE pseudo-targets. On the 77 exact-overlap THINGS-EEG/THINGS-fMRI test
+images:
+
+| head | visual64 rank | shifted | image corr | ROI corr | query-target diag-offdiag |
+|---|---:|---:|---:|---:|---:|
+| ordered query | 0.7384 | 0.4838 | 0.0525 | 0.1488 | 0.1332 |
+| pooled no-query | 0.7739 | 0.4836 | 0.0619 | 0.0932 | 0.0908 |
+
+Interpretation: pooled remains better for scalar image-level ROI retrieval, but
+ordered query has stronger ROI identity binding. The best-checkpoint
+time-window analysis is also neuro-plausible: ordered-query early visual ROIs
+depend most on `100-200 ms`, while mid/ventral visual ROIs depend most on
+`300-400 ms`. Query-channel attention is concentrated on posterior channels
+(`P8`, `Oz`, `P6`, `O1`, `O2`, `PO*`).
+
+Relevant files:
+
+- `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_interpretability_20260605.md`
+- `fmri_foundation_workspace/results/eeg_image_bridge/things_fmri_external_validation/realfmri_visual64_interpretability/summary.md`
+
+### 7. Fine visual-surface prototype check
 
 To address whether 38/64 ROI averages are too coarse to demonstrate spatial
 knowledge, the latest check uses 256 TRIBE visual-surface spatial prototypes

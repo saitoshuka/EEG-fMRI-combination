@@ -336,6 +336,7 @@ def main() -> int:
     parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIR)
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     parser.add_argument("--tag", default="query_time_dependency")
+    parser.add_argument("--checkpoint-name", default="model.pt")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--batch-size", type=int, default=128)
     args = parser.parse_args()
@@ -363,7 +364,8 @@ def main() -> int:
         groups = roi_group_indices(names, visual_group_json)  # type: ignore[arg-type]
 
         model = build_model(summary, train_payload, device)
-        state = torch.load(run_dir / "model.pt", map_location=device, weights_only=True)
+        ckpt = run_dir / args.checkpoint_name
+        state = torch.load(ckpt, map_location=device, weights_only=True)
         model.load_state_dict(state)
         subjects = list(summary["subjects"])
         eeg_stack = load_or_build_test_eeg_stack(
@@ -448,6 +450,7 @@ def main() -> int:
             {
                 "run": run_name,
                 "roi_kind": roi_kind,
+                "checkpoint": str(ckpt),
                 "train_roi": str(train_roi),
                 "test_roi": str(test_roi),
                 "n_query": int(len(names)),  # type: ignore[arg-type]
@@ -459,6 +462,7 @@ def main() -> int:
     write_csv(all_group_rows, out_root / "all_group_aggregate_time_metrics.csv")
     summary = {
         "tag": args.tag,
+        "checkpoint_name": args.checkpoint_name,
         "runs": run_summaries,
         "device": str(device),
         "time_axis": "250 samples = 0-1000 ms post-stimulus after dropping 50 baseline samples",
