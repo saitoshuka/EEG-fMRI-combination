@@ -27,10 +27,11 @@ visual stimulus
   -> ROI-query spatial branch
 ```
 
-This does not yet claim that EEG predicts measured fMRI. It tests whether EEG
-visual decoding can be regularized with a foundation-model cortical teacher and
-whether the learned ROI branch has query-specific spatial and temporal
-structure.
+The project now has a direct measured-fMRI validation gate on THINGS-fMRI exact
+image overlaps. The strongest current claim is not whole-brain EEG-to-fMRI
+decoding, but a narrower one: EEG visual responses can predict real
+image-evoked visual-fMRI ROI patterns, and stimulus-derived cortical teachers
+can provide a scalable spatial supervision target when measured fMRI is absent.
 
 ## Repository Layout
 
@@ -93,6 +94,38 @@ Main design:
 - fine `parcel38` targets used as the main spatial branch
 - raw ROI targets for visualization and corticalized stimulus signal
 - CLIP-residual ROI targets for a stricter beyond-CLIP claim
+
+### 2.5. Direct THINGS-fMRI external validation
+
+The direct measured-fMRI gate uses OpenNeuro ds004192 / THINGS-fMRI ICA beta
+derivatives. It aligns exact image overlaps between THINGS-EEG and THINGS-fMRI:
+
+- 6330 overlapping train images
+- 77 exact overlapping THINGS-EEG test images
+- 3 fMRI subjects, subject-averaged beta targets
+- `visual64`: curated visual subset of the 207 shared metadata ROI columns
+- `shared207`: all 207 shared metadata ROI columns
+
+Best-checkpoint direct ATM results:
+
+| model | target | ROI rank | shifted | image corr | ROI-wise corr | query identity diag-offdiag |
+|---|---|---:|---:|---:|---:|---:|
+| ordered query | real visual64 | 0.7384 | 0.4838 | 0.0525 | 0.1488 | 0.1315 |
+| pooled no-query | real visual64 | 0.7739 | 0.4836 | 0.0619 | 0.0932 | 0.0896 |
+| ordered query | real shared207 | 0.7297 | 0.4728 | 0.0402 | 0.0414 | 0.0345 |
+
+The shared207 signal is visual-driven: curated visual64 subset rank is 0.7221
+vs shifted 0.4937, while nonvisual/uncurated ROI rank is 0.4870 vs shifted
+0.4744. This supports a visual cortical interpretation, not a broad whole-brain
+claim. Pooled currently wins image-level visual64 retrieval rank; ordered query
+wins fixed ROI-identity structure and remains the interpretability branch.
+
+Relevant files:
+
+- `fmri_foundation_workspace/scripts/build_things_fmri_atm_shared_roi_targets.py`
+- `fmri_foundation_workspace/scripts/run_atm_real_fmri_shared_roi207.sh`
+- `fmri_foundation_workspace/scripts/evaluate_atm_real_fmri_roi_runs.py`
+- `fmri_foundation_workspace/notes/eeg_image_bridge/things_fmri_external_validation_results_20260604.md`
 
 ### 3. 16k THINGS-EEG training result
 
@@ -209,20 +242,20 @@ caches that are not committed.
 
 Strongest current claim:
 
-> A stimulus-mediated TRIBE v2 pseudo-cortical teacher can provide a
-> query-specific spatial supervision signal for EEG visual decoding, especially
-> in fine-grained visual parcels.
+> EEG visual responses can predict real image-evoked visual-fMRI ROI patterns
+> on exact THINGS-EEG/THINGS-fMRI overlaps; stimulus-derived cortical teachers
+> can then scale this spatial supervision beyond scarce paired EEG-fMRI data.
 
 Do not claim yet:
 
 - EEG reconstructs true fMRI activity across arbitrary paired datasets.
 - The cortical maps are measured brain activation.
+- Ordered ROI queries improve scalar retrieval/rank over pooled heads.
 - The current 200-image test-set retrieval gain is definitive.
 
 Next evidence needed:
 
-- real fMRI consistency on image-fMRI datasets where stimuli allow alignment;
+- finer visual surface/prototype targets with matched query-vs-pooled controls;
 - validation-selected checkpoints rather than test-selected best checkpoints;
 - subject-heldout and cross-dataset tests for robustness;
 - generation-side comparison against the original image reconstruction model.
-
