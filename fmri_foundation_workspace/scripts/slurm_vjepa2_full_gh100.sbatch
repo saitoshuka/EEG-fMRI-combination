@@ -23,7 +23,8 @@
 #     --include-clip-vith14 \
 #     --feature-train fmri_foundation_workspace/results/eeg_image_bridge/vjepa2_features/vjepa2_vitg_fpc64_256_still64_full/vjepa2_features_train_merged_n16540.npz \
 #     --feature-test fmri_foundation_workspace/results/eeg_image_bridge/vjepa2_features/vjepa2_vitg_fpc64_256_still64_full/vjepa2_features_test_merged_n200.npz \
-#     --tag clip_vith14_plus_vjepa2_proto256_spatial_n16540
+#     --tag clip_vith14_plus_vjepa2_proto256_spatial_n16540 \
+#     --crossfit-folds 5
 #
 #SBATCH --job-name=vjepa2-still
 #SBATCH --output=logs/vjepa2-still-%A_%a.out

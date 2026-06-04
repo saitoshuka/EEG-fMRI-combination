@@ -97,6 +97,8 @@ def build_one(
     train_idx: np.ndarray,
     val_idx: np.ndarray,
     alpha_grid: list[float],
+    crossfit_folds: int,
+    seed: int,
 ) -> dict[str, object]:
     target_key = "parcel_targets" if roi_kind == "parcel" else "group_targets"
     raw_train = train_payload[target_key].astype("float32")
@@ -110,8 +112,21 @@ def build_one(
         alpha_grid,
         roi_kind,
     )
-    ridge = fit_ridge(feature_train[train_idx], raw_train[train_idx], best_alpha)
-    pred_train = ridge.predict(feature_train)
+    if crossfit_folds > 1:
+        pred_train = np.empty_like(raw_train, dtype="float32")
+        rng = np.random.default_rng(seed)
+        folds = np.array_split(rng.permutation(len(raw_train)), crossfit_folds)
+        all_idx = np.arange(len(raw_train))
+        for fold_idx in folds:
+            if len(fold_idx) == 0:
+                continue
+            fit_idx = np.setdiff1d(all_idx, fold_idx, assume_unique=False)
+            fold_ridge = fit_ridge(feature_train[fit_idx], raw_train[fit_idx], best_alpha)
+            pred_train[fold_idx] = fold_ridge.predict(feature_train[fold_idx])
+        ridge = fit_ridge(feature_train, raw_train, best_alpha)
+    else:
+        ridge = fit_ridge(feature_train[train_idx], raw_train[train_idx], best_alpha)
+        pred_train = ridge.predict(feature_train)
     pred_test = ridge.predict(feature_test)
     residual_train = raw_train - pred_train
     residual_test = raw_test - pred_test
@@ -158,6 +173,15 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=33)
     parser.add_argument("--val-fraction", type=float, default=0.1)
     parser.add_argument("--alphas", default="0.1,1,10,100,1000")
+    parser.add_argument(
+        "--crossfit-folds",
+        type=int,
+        default=1,
+        help=(
+            "Use K-fold out-of-fold predictions for train residual targets. "
+            "Test predictions are still fit on train only."
+        ),
+    )
     parser.add_argument("--no-normalize-each", action="store_true")
     args = parser.parse_args()
 
@@ -208,6 +232,8 @@ def main() -> int:
         ridge_train_idx,
         val_idx,
         alpha_grid,
+        args.crossfit_folds,
+        args.seed,
     )
     parcel = build_one(
         "parcel",
@@ -218,6 +244,8 @@ def main() -> int:
         ridge_train_idx,
         val_idx,
         alpha_grid,
+        args.crossfit_folds,
+        args.seed,
     )
 
     residual_name = "+".join(train_feature_names)
@@ -263,6 +291,7 @@ def main() -> int:
         ridge_val_indices=val_idx.astype(np.int32),
         feature_sources=np.array(train_feature_names),
         residualized_against=np.array(residual_name),
+        crossfit_folds=np.array(args.crossfit_folds, dtype=np.int32),
     )
     np.savez_compressed(
         residual_test,
@@ -283,6 +312,7 @@ def main() -> int:
         ridge_val_indices=val_idx.astype(np.int32),
         feature_sources=np.array(train_feature_names),
         residualized_against=np.array(residual_name),
+        crossfit_folds=np.array(args.crossfit_folds, dtype=np.int32),
     )
 
     rows = group["alpha_rows"] + parcel["alpha_rows"] + [group["test_metrics"], parcel["test_metrics"]]  # type: ignore[operator]
@@ -301,6 +331,7 @@ def main() -> int:
         "n_ridge_val": int(len(val_idx)),
         "feature_sources": train_feature_names,
         "feature_dim": int(feature_train.shape[1]),
+        "crossfit_folds": args.crossfit_folds,
         "seed": args.seed,
         "val_fraction": args.val_fraction,
         "alphas": alpha_grid,
