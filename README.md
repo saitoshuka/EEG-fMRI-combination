@@ -106,12 +106,17 @@ derivatives. It aligns exact image overlaps between THINGS-EEG and THINGS-fMRI:
 - `visual64`: curated visual subset of the 207 shared metadata ROI columns
 - `shared207`: all 207 shared metadata ROI columns
 
-Best-checkpoint direct ATM results:
+Best-checkpoint direct visual64 ATM results, aggregated over seeds 11/33/77:
+
+| model | target | seeds | ROI rank mean +/- sd | shifted | image corr | ROI-wise corr | query identity diag-offdiag |
+|---|---|---|---:|---:|---:|---:|---:|
+| ordered query | real visual64 | 11,33,77 | 0.7186 +/- 0.0232 | 0.4809 | 0.0502 | 0.1447 | 0.1261 |
+| pooled no-query | real visual64 | 11,33,77 | 0.7667 +/- 0.0074 | 0.4801 | 0.0585 | 0.0863 | 0.0829 |
+
+Single-seed shared207 context:
 
 | model | target | ROI rank | shifted | image corr | ROI-wise corr | query identity diag-offdiag |
 |---|---|---:|---:|---:|---:|---:|
-| ordered query | real visual64 | 0.7384 | 0.4838 | 0.0525 | 0.1488 | 0.1315 |
-| pooled no-query | real visual64 | 0.7739 | 0.4836 | 0.0619 | 0.0932 | 0.0896 |
 | ordered query | real shared207 | 0.7297 | 0.4728 | 0.0402 | 0.0414 | 0.0345 |
 
 The shared207 signal is visual-driven: curated visual64 subset rank is 0.7221
@@ -125,6 +130,8 @@ Relevant files:
 - `fmri_foundation_workspace/scripts/build_things_fmri_atm_shared_roi_targets.py`
 - `fmri_foundation_workspace/scripts/run_atm_real_fmri_shared_roi207.sh`
 - `fmri_foundation_workspace/scripts/evaluate_atm_real_fmri_roi_runs.py`
+- `fmri_foundation_workspace/scripts/summarize_atm_real_fmri_visual64_multiseed.py`
+- `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_multiseed_final_20260605.md`
 - `fmri_foundation_workspace/notes/eeg_image_bridge/things_fmri_external_validation_results_20260604.md`
 
 ### 3. 16k THINGS-EEG training result
@@ -219,15 +226,15 @@ Relevant files:
 
 The direct THINGS-fMRI validation uses real measured fMRI visual ROI activity,
 not TRIBE pseudo-targets. On the 77 exact-overlap THINGS-EEG/THINGS-fMRI test
-images:
+images, the three-seed summary is:
 
-| head | visual64 rank | shifted | image corr | ROI corr | query-target diag-offdiag |
-|---|---:|---:|---:|---:|---:|
-| ordered query | 0.7384 | 0.4838 | 0.0525 | 0.1488 | 0.1332 |
-| pooled no-query | 0.7739 | 0.4836 | 0.0619 | 0.0932 | 0.0908 |
+| head | seeds | visual64 rank mean +/- sd | shifted | image corr | ROI corr | query-target diag-offdiag |
+|---|---|---:|---:|---:|---:|---:|
+| ordered query | 11,33,77 | 0.7186 +/- 0.0232 | 0.4809 | 0.0502 | 0.1447 | 0.1261 |
+| pooled no-query | 11,33,77 | 0.7667 +/- 0.0074 | 0.4801 | 0.0585 | 0.0863 | 0.0829 |
 
 Interpretation: pooled remains better for scalar image-level ROI retrieval, but
-ordered query has stronger ROI identity binding. The best-checkpoint
+ordered query has stronger ROI identity binding. The seed33 best-checkpoint
 time-window analysis is also neuro-plausible: ordered-query early visual ROIs
 depend most on `100-200 ms`, while mid/ventral visual ROIs depend most on
 `300-400 ms`. Query-channel attention is concentrated on posterior channels
@@ -236,6 +243,7 @@ depend most on `100-200 ms`, while mid/ventral visual ROIs depend most on
 Relevant files:
 
 - `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_interpretability_20260605.md`
+- `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_multiseed_final_20260605.md`
 - `fmri_foundation_workspace/results/eeg_image_bridge/things_fmri_external_validation/realfmri_visual64_interpretability/summary.md`
 
 ### 7. Fine visual-surface prototype check

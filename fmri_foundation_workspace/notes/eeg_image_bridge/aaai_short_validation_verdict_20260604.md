@@ -97,19 +97,20 @@ query-specific cortical structure result on k256/finer targets.
 Date: 2026-06-05
 
 The previous verdict treated real fMRI validation as a missing requirement.
-This has now partially improved. We trained ATM spatial heads directly against
-real THINGS-fMRI visual64 ROI targets on the 6,330-image EEG/fMRI overlap and
-evaluated on the 77 exact-overlap test images.
+This has now improved. We trained ATM spatial heads directly against real
+THINGS-fMRI visual64 ROI targets on the 6,330-image EEG/fMRI overlap and
+evaluated on the 77 exact-overlap test images. The robustness check is complete
+for seeds 11/33/77:
 
-| head | visual64 rank | shifted | image corr | ROI corr | query-target diag-offdiag |
-|---|---:|---:|---:|---:|---:|
-| ordered query | 0.7384 | 0.4838 | 0.0525 | 0.1488 | 0.1332 |
-| pooled no-query | 0.7739 | 0.4836 | 0.0619 | 0.0932 | 0.0908 |
+| head | seeds | visual64 rank mean +/- sd | shifted | image corr | ROI corr | query-target diag-offdiag |
+|---|---|---:|---:|---:|---:|---:|
+| ordered query | 11,33,77 | 0.7186 +/- 0.0232 | 0.4809 | 0.0502 | 0.1447 | 0.1261 |
+| pooled no-query | 11,33,77 | 0.7667 +/- 0.0074 | 0.4801 | 0.0585 | 0.0863 | 0.0829 |
 
 Interpretation:
 
 - Real measured fMRI visual ROI patterns are decodable from THINGS-EEG above
-  shifted controls.
+  shifted controls across three random seeds.
 - Pooled prediction is still stronger for scalar image-level ROI retrieval.
 - Ordered query is stronger for ROI identity binding and gives cleaner
   interpretability.
@@ -118,14 +119,15 @@ Interpretation:
   depend most on 300-400 ms EEG. Query-channel attention is concentrated over
   posterior channels such as P8, Oz, P6, O1/O2, and PO electrodes.
 
-This upgrades the "real fMRI grounding" gate from fail to **partial pass for
-visual cortex**, but not to a whole-brain fMRI claim. The shared207 run shows
-that positive signal is driven by visual curated ROIs, while nonvisual or
-uncurated ROIs remain near chance.
+This upgrades the "real fMRI grounding" gate from fail to **pass for visual
+cortex**, but not to a whole-brain fMRI claim. The shared207 run shows that
+positive signal is driven by visual curated ROIs, while nonvisual or uncurated
+ROIs remain near chance.
 
-Relevant file:
+Relevant files:
 
 - `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_interpretability_20260605.md`
+- `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_multiseed_final_20260605.md`
 
 ## Update: Proto256 Query Constraint Check
 
@@ -164,9 +166,9 @@ Current status after the real-fMRI and proto256 updates:
 
 - **Workshop / internal presentation**: ready with careful wording.
 - **AAAI main conference**: still not ready, but the story is now more viable
-  than the 2026-06-04 verdict because it has measured real-fMRI visual-cortex
-  evidence and finer k256 prototype evidence.
-- The remaining main-conference blocker is not "can EEG predict any cortical
-  target"; it is whether the proposed query/spatial-prior architecture can beat
-  strong pooled/semantic controls or provide sufficiently robust, confirmatory,
-  neuroscience-aligned interpretability.
+  than the 2026-06-04 verdict because it has multiseed measured real-fMRI
+  visual-cortex evidence and finer k256 prototype evidence.
+- The remaining main-conference blocker is no longer "can EEG predict any real
+  cortical target"; it is whether the proposed query/spatial-prior architecture
+  can beat strong pooled/semantic controls or provide sufficiently robust,
+  confirmatory, neuroscience-aligned interpretability.
