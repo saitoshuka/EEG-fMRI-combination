@@ -234,16 +234,18 @@ images, the three-seed summary is:
 | pooled no-query | 11,33,77 | 0.7667 +/- 0.0074 | 0.4801 | 0.0585 | 0.0863 | 0.0829 |
 
 Interpretation: pooled remains better for scalar image-level ROI retrieval, but
-ordered query has stronger ROI identity binding. The seed33 best-checkpoint
-time-window analysis is also neuro-plausible: ordered-query early visual ROIs
-depend most on `100-200 ms`, while mid/ventral visual ROIs depend most on
-`300-400 ms`. Query-channel attention is concentrated on posterior channels
-(`P8`, `Oz`, `P6`, `O1`, `O2`, `PO*`).
+ordered query has stronger ROI identity binding. The multiseed best-checkpoint
+time-window analysis is also neuro-plausible: early visual ROIs are most harmed
+by dropping `100-200 ms`, while mid/ventral/all visual ROIs are most harmed by
+dropping `300-400 ms`. Query-channel attention is posterior weighted across
+seeds, with `O/PO/P` channels carrying 0.6867 of attention mass; top channels
+include `Oz`, `P8`, `O1`, `O2`, `P6`, and `PO7`.
 
 Relevant files:
 
 - `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_interpretability_20260605.md`
 - `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_multiseed_final_20260605.md`
+- `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_multiseed_interpretability_20260605.md`
 - `fmri_foundation_workspace/results/eeg_image_bridge/things_fmri_external_validation/realfmri_visual64_interpretability/summary.md`
 
 ### 7. Fine visual-surface prototype check

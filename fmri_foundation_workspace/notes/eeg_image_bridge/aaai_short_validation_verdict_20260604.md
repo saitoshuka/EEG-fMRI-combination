@@ -114,10 +114,11 @@ Interpretation:
 - Pooled prediction is still stronger for scalar image-level ROI retrieval.
 - Ordered query is stronger for ROI identity binding and gives cleaner
   interpretability.
-- The real-fMRI query-time analysis is neuro-plausible: ordered-query early
-  visual ROIs depend most on 100-200 ms EEG, whereas mid/ventral visual ROIs
-  depend most on 300-400 ms EEG. Query-channel attention is concentrated over
-  posterior channels such as P8, Oz, P6, O1/O2, and PO electrodes.
+- The real-fMRI query-time analysis is neuro-plausible across seeds 11/33/77:
+  mid/ventral/all visual families consistently depend most on 300-400 ms EEG,
+  and early visual ROIs are consistently most harmed by dropping 100-200 ms.
+  Query-channel attention is posterior weighted, with O/PO/P channels carrying
+  0.6867 of attention mass.
 
 This upgrades the "real fMRI grounding" gate from fail to **pass for visual
 cortex**, but not to a whole-brain fMRI claim. The shared207 run shows that
@@ -128,6 +129,7 @@ Relevant files:
 
 - `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_interpretability_20260605.md`
 - `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_multiseed_final_20260605.md`
+- `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_multiseed_interpretability_20260605.md`
 
 ## Update: Proto256 Query Constraint Check
 

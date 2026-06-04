@@ -155,9 +155,13 @@ As of 2026-06-05:
   scalar ROI rank. On real visual64, ordered query has stronger ROI corr
   (0.1447 vs 0.0863) and identity diag-offdiag (0.1261 vs 0.0829), while pooled
   wins scalar ROI-pattern retrieval.
-- H3 is supported in the seed33 ordered-query real visual64 analysis; it should
-  be treated as interpretability evidence until replicated across query seeds.
-- H4 is supported as a secondary attribution pattern.
+- H3 is partially supported across ordered-query real visual64 seeds 11/33/77:
+  mid/ventral/all visual families consistently peak at 300-400 ms, and
+  early-visual drop-window importance consistently peaks at 100-200 ms. The
+  early-visual best-keep window is less stable, so the timing claim should be
+  phrased as an ablation dependency rather than direct activation latency.
+- H4 is supported as a secondary attribution pattern. Across seeds, posterior
+  `O/PO/P` channels carry 0.6867 of query attention mass.
 - H5 is only partially supported. Coordinate-only query is negative:
   proto256 residual rank is 0.5814 vs original query 0.6020, and
   identity/geometry are weaker. Group+coordinate query is better structured:
