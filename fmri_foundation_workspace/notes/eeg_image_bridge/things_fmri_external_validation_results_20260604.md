@@ -178,27 +178,50 @@ tokens.
 
 ### ATM Direct Real-fMRI Visual64 Supervision
 
-This is the cleanest direct EEG-to-real-fMRI gate so far. Targets are the
-`all_visual_curated` subset of shared THINGS-fMRI binary ROI columns: 64 visual
-ROI columns selected from the 207 shared metadata-derived ROI columns using the
-curated early/mid/ventral visual sets in
-`analyze_things_fmri_external_roi_breakdown.py`. Training uses the 6330
-THINGS-EEG/THINGS-fMRI train-overlap images; evaluation uses the 77 exact
-THINGS-EEG test images that overlap THINGS-fMRI. No TRIBE target is used in
-this run.
+This is the cleanest direct EEG-to-real-fMRI gate so far. No TRIBE target is
+used in these runs. Targets are real THINGS-fMRI ROI beta columns built from
+the exact THINGS-EEG/THINGS-fMRI image overlap. `visual64` means the
+`all_visual_curated` subset of the 207 shared THINGS-fMRI binary ROI columns;
+`shared207` means all 207 shared ROI columns. Training uses the 6330
+train-overlap images; evaluation uses the 77 exact THINGS-EEG test images that
+overlap THINGS-fMRI.
 
-| head | n_test | n_roi | rank | shifted | delta | top1 | top5 | image_corr | roi_corr |
+| run_short | target_label | spatial_head | family | n_family_roi | rank | shifted | delta | image_corr | roi_corr | diag_offdiag |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| query_real_fmri_visualroi64 | visual64 | query | all_visual64 | 64 | 0.7384 | 0.4838 | 0.2546 | 0.0525 | 0.1488 | 0.1315 |
+| pooled_real_fmri_visualroi64 | visual64 | pooled | all_visual64 | 64 | 0.7739 | 0.4836 | 0.2903 | 0.0619 | 0.0932 | 0.0896 |
+| query_real_fmri_sharedroi207 | shared207 | query | all_shared207 | 207 | 0.7297 | 0.4728 | 0.2568 | 0.0402 | 0.0414 | 0.0345 |
+| query_real_fmri_sharedroi207 | shared207 | query | all_visual_curated | 64 | 0.7221 | 0.4937 | 0.2285 | 0.0891 | 0.1268 | 0.1202 |
+| query_real_fmri_sharedroi207 | shared207 | query | nonvisual_or_uncurated | 143 | 0.4870 | 0.4744 | 0.0126 | -0.0089 | 0.0029 | -0.0004 |
+
+#### Direct Real-fMRI Shared207 Family Breakdown
+
+| family | n_family_roi | rank | shifted | delta | image_corr | roi_corr | diag_offdiag |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| all_visual_curated | 64 | 0.7221 | 0.4937 | 0.2285 | 0.0891 | 0.1268 | 0.1202 |
+| early_visual | 6 | 0.5665 | 0.5191 | 0.0473 | 0.0263 | 0.0741 | 0.0254 |
+| mid_visual | 24 | 0.5784 | 0.5027 | 0.0757 | 0.0911 | 0.1290 | 0.0870 |
+| ventral_category_high | 34 | 0.6581 | 0.5249 | 0.1331 | 0.0741 | 0.1345 | 0.1312 |
+| nonvisual_or_uncurated | 143 | 0.4870 | 0.4744 | 0.0126 | -0.0089 | 0.0029 | -0.0004 |
+
+#### Direct Real-fMRI Query-Identity Metrics
+
+| run_short | target_label | spatial_head | family | n_family_roi | diag | offdiag | diag_offdiag | within_between | diag_minus_shuffled |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| query | 77 | 64 | 0.7384 | 0.4838 | 0.2546 | 0.0779 | 0.1818 | 0.0525 | 0.1488 |
-| pooled | 77 | 64 | 0.7739 | 0.4836 | 0.2903 | 0.0649 | 0.2468 | 0.0619 | 0.0932 |
+| query_real_fmri_visualroi64 | visual64 | query | all_visual64 | 64 | 0.1450 | 0.0135 | 0.1315 | 0.0163 | 0.1350 |
+| pooled_real_fmri_visualroi64 | visual64 | pooled | all_visual64 | 64 | 0.0908 | 0.0012 | 0.0896 | 0.0080 | 0.0992 |
+| query_real_fmri_sharedroi207 | shared207 | query | all_visual_curated | 64 | 0.1236 | 0.0034 | 0.1202 | 0.0168 | 0.1309 |
+| query_real_fmri_sharedroi207 | shared207 | query | nonvisual_or_uncurated | 143 | 0.0029 | 0.0033 | -0.0004 |  | 0.0038 |
 
-Interpretation: direct real-fMRI visual ROI supervision gives a clear
-above-shifted alignment signal. The pooled no-query head has higher image-level
-ROI retrieval rank, while the ordered-query head has higher ROI-wise correlation
-in the best checkpoint. Therefore the performance claim should be "EEG can
-predict real visual-fMRI ROI patterns"; the ordered-query claim should be framed
-as fixed ROI identity and interpretability unless later finer-resolution query
-targets outperform pooled controls.
+Interpretation: direct real-fMRI supervision gives a clear above-shifted visual
+alignment signal. The shared207 run is not a broad whole-brain claim: the
+nonvisual/uncurated subset is near chance, while the curated visual subset is
+positive. The pooled no-query head still has higher image-level visual64 ROI
+retrieval rank, but the ordered-query head has stronger fixed ROI identity
+(higher diagonal-vs-offdiagonal and within-visual-family structure). Therefore
+the performance claim should be "EEG can predict real visual-fMRI ROI patterns";
+the ordered-query claim should be framed as spatially structured interpretability
+unless later finer-resolution query targets outperform pooled controls.
 
 ### Image Retrieval With Cortical Reranking
 
@@ -304,7 +327,7 @@ should be finer-grained cortical prototypes or surface parcels rather than only
 5. EEG-predicted ROI outputs from the current ROI-query deep model are weak in all-ROI207 on the 77 exact test images. However, the residual ROI-query model passes a visual-family real-fMRI check (all_visual_curated rank 0.6107, p=0.0004), and the larger 1000-image overlap probe shows that averaged raw EEG waveform features can predict real fMRI visual-family patterns well above shuffled controls across multiple random heldout seeds.
 6. The raw EEG signal has plausible temporal/channel structure: 300-400 ms is the strongest single 100 ms window, and posterior P/PO/O channels outperform full EEG. This changes the bottleneck diagnosis: EEG is not pure noise; the current end-to-end ROI-query route is not yet extracting the full available signal.
 7. A small trainable factorized-query model predicts real visual-fMRI targets above shifted/shuffled controls across four heldout seeds. Mean rank is slightly above the full-channel ridge baseline (0.6461 vs 0.6399), but the margin is modest and not monotonic across seeds; this is a promising interpretable model result, not yet a final SOTA claim.
-8. Direct ATM supervision with real THINGS-fMRI visual64 targets gives a strong exact-test77 alignment signal. The pooled head reaches higher image-level ROI retrieval rank, while the ordered-query head gives higher ROI-wise correlation. This supports real visual-fMRI target predictability, but not yet a scalar-rank advantage for ordered queries.
+8. Direct ATM supervision with real THINGS-fMRI visual64/shared207 targets gives a strong exact-test77 alignment signal. The shared207 signal is driven by curated visual ROIs; nonvisual/uncurated ROIs are near chance. The pooled head reaches higher image-level visual64 ROI retrieval rank, while the ordered-query head gives stronger query-target identity structure. This supports real visual-fMRI target predictability and query interpretability, but not yet a scalar-rank advantage for ordered queries.
 9. In raw-ridge image retrieval, V-JEPA2 and CLIP+V-JEPA2 are stronger semantic target spaces than CLIP alone on the overlap split. This should remain a diagnostic target-space result, not the main architecture baseline.
 10. In the ATM-aligned retrieval check, TRIBE cortical reranking improves the frozen ATM baseline on the 200-image test set, with shifted/permutation-null reranking clearly lower. Test-split CV shows a consistent small heldout trend, but the train-image validation route is invalid because training-image retrieval is nearly saturated and selects no rerank. This keeps the rerank result promising but not final.
 11. The ROI-query constraint is competitive with no-query pooled ROI heads. Pooled tends to be strong on scalar ROI rank, while query provides fixed ROI identity and query-specific interpretation. Therefore same-seed retrieval versus semantic-only ATM and direct real-fMRI visual64 correlation should be treated as primary checks; 38-ROI rank alone is auxiliary.

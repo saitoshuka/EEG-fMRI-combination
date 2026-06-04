@@ -120,6 +120,7 @@ def main() -> None:
     atm_real_fmri_visual64_eval_path = (
         args.external_dir / "atm_real_fmri_visual64_eval" / "summary.json"
     )
+    atm_real_fmri_roi_eval_dir = args.external_dir / "atm_real_fmri_roi_eval"
 
     key_family = family_eval[
         family_eval["label"].isin(FAMILY_LABELS) & family_eval["family"].isin(FAMILIES)
@@ -438,6 +439,8 @@ def main() -> None:
             ],
         )
     atm_real_visual64_text = "Not run yet."
+    atm_real_roi_family_text = "Not run yet."
+    atm_real_roi_identity_text = "Not run yet."
     if atm_real_fmri_visual64_eval_path.exists():
         payload = json.loads(atm_real_fmri_visual64_eval_path.read_text())
         rows = []
@@ -476,6 +479,136 @@ def main() -> None:
             )
             if rows
             else "Not run yet."
+        )
+    roi_eval_tables = []
+    for csv_name in ["summary_visual64.csv", "summary_shared207.csv"]:
+        path = atm_real_fmri_roi_eval_dir / csv_name
+        if path.exists():
+            roi_eval_tables.append(pd.read_csv(path))
+    if roi_eval_tables:
+        roi_eval = pd.concat(roi_eval_tables, ignore_index=True)
+        best = roi_eval[roi_eval["checkpoint"] == "model_best_roi_rank.pt"].copy()
+        best["run_short"] = best["run"].str.replace("atm_", "", regex=False).str.replace(
+            "_seed33_n6330_d256_none_lam005_sp005", "", regex=False
+        )
+        overview = best[
+            ((best["target_label"] == "visual64") & (best["family"] == "all_visual64"))
+            | (
+                (best["target_label"] == "shared207")
+                & best["family"].isin(["all_shared207", "all_visual_curated", "nonvisual_or_uncurated"])
+            )
+        ][
+            [
+                "run_short",
+                "target_label",
+                "spatial_head",
+                "family",
+                "n_family_roi",
+                "rank_percentile",
+                "shifted_rank_percentile",
+                "rank_delta",
+                "image_pattern_corr_mean",
+                "roi_corr_fisher_mean",
+                "query_target_diag_minus_offdiag",
+            ]
+        ].rename(
+            columns={
+                "rank_percentile": "rank",
+                "shifted_rank_percentile": "shifted",
+                "rank_delta": "delta",
+                "image_pattern_corr_mean": "image_corr",
+                "roi_corr_fisher_mean": "roi_corr",
+                "query_target_diag_minus_offdiag": "diag_offdiag",
+            }
+        )
+        atm_real_visual64_text = markdown_table(
+            overview,
+            [
+                "run_short",
+                "target_label",
+                "spatial_head",
+                "family",
+                "n_family_roi",
+                "rank",
+                "shifted",
+                "delta",
+                "image_corr",
+                "roi_corr",
+                "diag_offdiag",
+            ],
+        )
+        family = best[
+            (best["target_label"] == "shared207")
+            & best["family"].isin(
+                ["all_visual_curated", "early_visual", "mid_visual", "ventral_category_high", "nonvisual_or_uncurated"]
+            )
+        ][
+            [
+                "family",
+                "n_family_roi",
+                "rank_percentile",
+                "shifted_rank_percentile",
+                "rank_delta",
+                "image_pattern_corr_mean",
+                "roi_corr_fisher_mean",
+                "query_target_diag_minus_offdiag",
+            ]
+        ].rename(
+            columns={
+                "rank_percentile": "rank",
+                "shifted_rank_percentile": "shifted",
+                "rank_delta": "delta",
+                "image_pattern_corr_mean": "image_corr",
+                "roi_corr_fisher_mean": "roi_corr",
+                "query_target_diag_minus_offdiag": "diag_offdiag",
+            }
+        )
+        atm_real_roi_family_text = markdown_table(
+            family,
+            ["family", "n_family_roi", "rank", "shifted", "delta", "image_corr", "roi_corr", "diag_offdiag"],
+        )
+        identity = best[
+            ((best["target_label"] == "visual64") & (best["family"] == "all_visual64"))
+            | (
+                (best["target_label"] == "shared207")
+                & best["family"].isin(["all_visual_curated", "nonvisual_or_uncurated"])
+            )
+        ][
+            [
+                "run_short",
+                "target_label",
+                "spatial_head",
+                "family",
+                "n_family_roi",
+                "query_target_diag_mean",
+                "query_target_offdiag_mean",
+                "query_target_diag_minus_offdiag",
+                "query_target_within_minus_between",
+                "query_target_diag_minus_shuffled",
+            ]
+        ].rename(
+            columns={
+                "query_target_diag_mean": "diag",
+                "query_target_offdiag_mean": "offdiag",
+                "query_target_diag_minus_offdiag": "diag_offdiag",
+                "query_target_within_minus_between": "within_between",
+                "query_target_diag_minus_shuffled": "diag_minus_shuffled",
+            }
+        )
+        atm_real_roi_identity_text = markdown_table(
+            identity,
+            [
+                "run_short",
+                "target_label",
+                "spatial_head",
+                "family",
+                "n_family_roi",
+                "diag",
+                "offdiag",
+                "diag_offdiag",
+                "within_between",
+                "diag_minus_shuffled",
+            ],
         )
     retrieval_rows = []
     for dirname, label in [
@@ -892,24 +1025,33 @@ tokens.
 
 ### ATM Direct Real-fMRI Visual64 Supervision
 
-This is the cleanest direct EEG-to-real-fMRI gate so far. Targets are the
-`all_visual_curated` subset of shared THINGS-fMRI binary ROI columns: 64 visual
-ROI columns selected from the 207 shared metadata-derived ROI columns using the
-curated early/mid/ventral visual sets in
-`analyze_things_fmri_external_roi_breakdown.py`. Training uses the 6330
-THINGS-EEG/THINGS-fMRI train-overlap images; evaluation uses the 77 exact
-THINGS-EEG test images that overlap THINGS-fMRI. No TRIBE target is used in
-this run.
+This is the cleanest direct EEG-to-real-fMRI gate so far. No TRIBE target is
+used in these runs. Targets are real THINGS-fMRI ROI beta columns built from
+the exact THINGS-EEG/THINGS-fMRI image overlap. `visual64` means the
+`all_visual_curated` subset of the 207 shared THINGS-fMRI binary ROI columns;
+`shared207` means all 207 shared ROI columns. Training uses the 6330
+train-overlap images; evaluation uses the 77 exact THINGS-EEG test images that
+overlap THINGS-fMRI.
 
 {atm_real_visual64_text}
 
-Interpretation: direct real-fMRI visual ROI supervision gives a clear
-above-shifted alignment signal. The pooled no-query head has higher image-level
-ROI retrieval rank, while the ordered-query head has higher ROI-wise correlation
-in the best checkpoint. Therefore the performance claim should be "EEG can
-predict real visual-fMRI ROI patterns"; the ordered-query claim should be framed
-as fixed ROI identity and interpretability unless later finer-resolution query
-targets outperform pooled controls.
+#### Direct Real-fMRI Shared207 Family Breakdown
+
+{atm_real_roi_family_text}
+
+#### Direct Real-fMRI Query-Identity Metrics
+
+{atm_real_roi_identity_text}
+
+Interpretation: direct real-fMRI supervision gives a clear above-shifted visual
+alignment signal. The shared207 run is not a broad whole-brain claim: the
+nonvisual/uncurated subset is near chance, while the curated visual subset is
+positive. The pooled no-query head still has higher image-level visual64 ROI
+retrieval rank, but the ordered-query head has stronger fixed ROI identity
+(higher diagonal-vs-offdiagonal and within-visual-family structure). Therefore
+the performance claim should be "EEG can predict real visual-fMRI ROI patterns";
+the ordered-query claim should be framed as spatially structured interpretability
+unless later finer-resolution query targets outperform pooled controls.
 
 ### Image Retrieval With Cortical Reranking
 
@@ -979,7 +1121,7 @@ should be finer-grained cortical prototypes or surface parcels rather than only
 5. EEG-predicted ROI outputs from the current ROI-query deep model are weak in all-ROI207 on the 77 exact test images. However, the residual ROI-query model passes a visual-family real-fMRI check (all_visual_curated rank 0.6107, p=0.0004), and the larger 1000-image overlap probe shows that averaged raw EEG waveform features can predict real fMRI visual-family patterns well above shuffled controls across multiple random heldout seeds.
 6. The raw EEG signal has plausible temporal/channel structure: 300-400 ms is the strongest single 100 ms window, and posterior P/PO/O channels outperform full EEG. This changes the bottleneck diagnosis: EEG is not pure noise; the current end-to-end ROI-query route is not yet extracting the full available signal.
 7. A small trainable factorized-query model predicts real visual-fMRI targets above shifted/shuffled controls across four heldout seeds. Mean rank is slightly above the full-channel ridge baseline (0.6461 vs 0.6399), but the margin is modest and not monotonic across seeds; this is a promising interpretable model result, not yet a final SOTA claim.
-8. Direct ATM supervision with real THINGS-fMRI visual64 targets gives a strong exact-test77 alignment signal. The pooled head reaches higher image-level ROI retrieval rank, while the ordered-query head gives higher ROI-wise correlation. This supports real visual-fMRI target predictability, but not yet a scalar-rank advantage for ordered queries.
+8. Direct ATM supervision with real THINGS-fMRI visual64/shared207 targets gives a strong exact-test77 alignment signal. The shared207 signal is driven by curated visual ROIs; nonvisual/uncurated ROIs are near chance. The pooled head reaches higher image-level visual64 ROI retrieval rank, while the ordered-query head gives stronger query-target identity structure. This supports real visual-fMRI target predictability and query interpretability, but not yet a scalar-rank advantage for ordered queries.
 9. In raw-ridge image retrieval, V-JEPA2 and CLIP+V-JEPA2 are stronger semantic target spaces than CLIP alone on the overlap split. This should remain a diagnostic target-space result, not the main architecture baseline.
 10. In the ATM-aligned retrieval check, TRIBE cortical reranking improves the frozen ATM baseline on the 200-image test set, with shifted/permutation-null reranking clearly lower. Test-split CV shows a consistent small heldout trend, but the train-image validation route is invalid because training-image retrieval is nearly saturated and selects no rerank. This keeps the rerank result promising but not final.
 11. The ROI-query constraint is competitive with no-query pooled ROI heads. Pooled tends to be strong on scalar ROI rank, while query provides fixed ROI identity and query-specific interpretation. Therefore same-seed retrieval versus semantic-only ATM and direct real-fMRI visual64 correlation should be treated as primary checks; 38-ROI rank alone is auxiliary.

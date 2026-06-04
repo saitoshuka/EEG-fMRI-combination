@@ -134,3 +134,20 @@ Not supported yet:
 - "Ordered ROI-query attention robustly improves scalar real visual64 ROI rank over a pooled ROI head."
 - "The method is ready as an AAAI main-conference contribution."
 - "The approach improves image generation or retrieval under strict final evaluation."
+
+## 2026-06-05 Direct Real-fMRI Update
+
+New evidence added after the earlier gate:
+
+- Direct ATM -> real THINGS-fMRI visual64, ordered query head: rank 0.7384 vs shifted 0.4838, image-pattern corr 0.0525, ROI-wise corr 0.1488, query-target diag-offdiag 0.1315.
+- Direct ATM -> real THINGS-fMRI visual64, pooled no-query head: rank 0.7739 vs shifted 0.4836, image-pattern corr 0.0619, ROI-wise corr 0.0932, query-target diag-offdiag 0.0896.
+- Direct ATM -> real THINGS-fMRI shared207, ordered query head: all shared ROI rank 0.7297 vs shifted 0.4728. The signal is visual-driven: visual64 subset rank 0.7221 vs shifted 0.4937, nonvisual/uncurated subset rank 0.4870 vs shifted 0.4744.
+- Shared207 visual-family split: early visual is weak but above shifted (0.5665 vs 0.5191), mid visual is above shifted (0.5784 vs 0.5027), and ventral/category ROIs are strongest (0.6581 vs 0.5249).
+- Query identity is stronger for the ordered-query visual64 model than for pooled: diag-offdiag 0.1315 vs 0.0896, and within-vs-between visual-family structure 0.0163 vs 0.0080.
+
+Updated interpretation:
+
+- The cleanest current claim is no longer only pseudo-TRIBE supervision. We can now say that ATM EEG models predict real image-evoked THINGS-fMRI visual ROI patterns on exact overlapping test images.
+- The shared207 result should not be presented as whole-brain decoding. It is a useful negative/positive split: visual ROIs are positive, nonvisual/uncurated ROIs are near chance.
+- The query branch still should not be sold as a scalar-rank winner, because pooled visual64 rank is higher. Its value is fixed ROI identity, spatial interpretability, and a route to finer-resolution cortical prototypes.
+- For AAAI, the next decision-value experiment is finer than 64 visual ROIs: build visual cortex surface/prototype targets with a matched pooled control and ask whether query identity and retrieval/correlation scale beyond coarse ROI averages.
