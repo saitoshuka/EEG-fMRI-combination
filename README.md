@@ -344,6 +344,24 @@ Relevant file:
 
 - `fmri_foundation_workspace/notes/eeg_image_bridge/proto256_dual_head_metric_check_20260605.md`
 
+### 11. AAAI metric gate
+
+The current metric-facing audit says the direction is promising but not yet
+AAAI-ready as a performance paper.  The strongest evidence is measured
+THINGS-fMRI visual-cortex decoding and query-specific cortical identity.  The
+main missing result is a stable same-budget retrieval or generation win over
+semantic-only ATM.
+
+Raw cortical targets should be used for neuroscience visualization; residual
+targets should be used for strict beyond-CLIP/V-JEPA2 controls; real fMRI
+targets should be used as the measured-brain validation gate.  The present
+ordered-query branch is best described as an interpretability and spatial
+identity mechanism, not yet as the scalar-rank winner.
+
+Relevant file:
+
+- `fmri_foundation_workspace/notes/eeg_image_bridge/aaai_metric_gate_and_generation_route_20260605.md`
+
 ## Reproducibility Notes
 
 The local environment was managed with conda. The core EEG environment was
