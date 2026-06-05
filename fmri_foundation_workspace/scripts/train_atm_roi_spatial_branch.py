@@ -242,6 +242,58 @@ class TokenAttentionSemanticHead(nn.Module):
         return self.proj(pooled)
 
 
+class LateFusionClipHead(nn.Module):
+    """Small semantic+ROI adapter mixed back into the CLIP embedding space."""
+
+    def __init__(
+        self,
+        semantic_dim: int,
+        roi_dim: int,
+        hidden_dim: int = 1024,
+        dropout: float = 0.1,
+        mix_init: float = 0.1,
+        learn_mix: bool = False,
+    ):
+        super().__init__()
+        self.semantic_norm = nn.LayerNorm(semantic_dim)
+        self.roi_norm = nn.LayerNorm(roi_dim)
+        self.adapter = nn.Sequential(
+            nn.Linear(semantic_dim + roi_dim, hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, semantic_dim),
+            ResidualAdd(
+                nn.Sequential(
+                    nn.GELU(),
+                    nn.Linear(semantic_dim, semantic_dim),
+                    nn.Dropout(dropout),
+                )
+            ),
+            nn.LayerNorm(semantic_dim),
+        )
+        self.learn_mix = learn_mix
+        if learn_mix:
+            mix_init = float(np.clip(mix_init, 1e-4, 1.0 - 1e-4))
+            init = float(np.log(mix_init / (1.0 - mix_init)))
+            self.mix_logit = nn.Parameter(torch.tensor(init, dtype=torch.float32))
+        else:
+            mix_init = float(np.clip(mix_init, 0.0, 1.0))
+            self.register_buffer("mix_value", torch.tensor(mix_init), persistent=False)
+
+    def mix_weight(self) -> Tensor:
+        if self.learn_mix:
+            return torch.sigmoid(self.mix_logit)
+        return self.mix_value
+
+    def forward(self, semantic: Tensor, roi_pred: Tensor) -> Tensor:
+        adapter = self.adapter(
+            torch.cat([self.semantic_norm(semantic), self.roi_norm(roi_pred)], dim=-1)
+        )
+        mix = self.mix_weight().clamp(0.0, 1.0)
+        fused = (1.0 - mix) * F.normalize(semantic, dim=-1) + mix * F.normalize(adapter, dim=-1)
+        return F.normalize(fused, dim=-1)
+
+
 def parse_hemi(names: np.ndarray) -> torch.Tensor:
     # 0/1 are explicit surface hemispheres; 2 is a neutral bucket for ROI sets
     # such as THINGS-fMRI binary metadata columns that are not hemisphere-coded.
@@ -596,6 +648,9 @@ class AtmSemanticSpatial(nn.Module):
         semantic_head: str = "shallow",
         use_spatial: bool = True,
         spatial_head: str = "query",
+        fusion_head: str = "none",
+        fusion_mix: float = 0.1,
+        fusion_learn_mix: bool = False,
     ):
         super().__init__()
         default_config = Config(
@@ -629,6 +684,8 @@ class AtmSemanticSpatial(nn.Module):
         self.loss_func = ClipLoss()
         self.use_spatial = use_spatial
         self.spatial_head = spatial_head
+        self.fusion_head_name = fusion_head
+        self.fusion_head: LateFusionClipHead | None = None
         if use_spatial:
             assert roi_names is not None and vertex_counts is not None
             if spatial_head == "query":
@@ -670,6 +727,19 @@ class AtmSemanticSpatial(nn.Module):
                 )
             else:
                 raise ValueError(f"Unknown spatial_head: {spatial_head}")
+            if fusion_head == "late":
+                self.fusion_head = LateFusionClipHead(
+                    semantic_dim=1024,
+                    roi_dim=len(roi_names),
+                    hidden_dim=1024,
+                    dropout=0.1,
+                    mix_init=fusion_mix,
+                    learn_mix=fusion_learn_mix,
+                )
+            elif fusion_head != "none":
+                raise ValueError(f"Unknown fusion_head: {fusion_head}")
+        elif fusion_head != "none":
+            raise ValueError("--fusion-head requires --mode spatial")
 
     def forward(self, x: Tensor, subject_ids: Tensor) -> dict[str, Tensor]:
         tokens = self.encoder(x, None, subject_ids)
@@ -687,6 +757,9 @@ class AtmSemanticSpatial(nn.Module):
                 roi_pred, roi_tokens = branch_out
             out["roi_pred"] = roi_pred
             out["roi_tokens"] = roi_tokens
+            if self.fusion_head is not None:
+                out["fusion"] = self.fusion_head(out["semantic"], roi_pred)
+                out["fusion_mix"] = self.fusion_head.mix_weight().detach()
         return out
 
 
@@ -977,6 +1050,7 @@ def evaluate_clip_retrieval(
 ) -> dict[str, float]:
     model.eval()
     sem_preds = []
+    fusion_preds = []
     roi_preds: dict[str, list[Tensor]] = {}
     with torch.no_grad():
         for subject_idx, subject in enumerate(subjects):
@@ -990,11 +1064,16 @@ def evaluate_clip_retrieval(
                 sids = sid[start : start + batch_size].to(device)
                 out = model(x, sids)
                 sem_preds.append(out["semantic"].cpu())
+                if "fusion" in out:
+                    fusion_preds.append(out["fusion"].cpu())
                 for key in ["roi_pred", "roi_pred_query", "roi_pred_pooled"]:
                     if key in out:
                         roi_preds.setdefault(key, []).append(out[key].cpu())
     sem = torch.cat(sem_preds, dim=0).reshape(len(subjects), len(test_image_index), -1).mean(dim=0)
     metrics = {f"clip_{k}": v for k, v in retrieval_metrics(sem.numpy(), clip_test.numpy()).items()}
+    if fusion_preds:
+        fusion = torch.cat(fusion_preds, dim=0).reshape(len(subjects), len(test_image_index), -1).mean(dim=0)
+        metrics.update({f"fusion_clip_{k}": v for k, v in retrieval_metrics(fusion.numpy(), clip_test.numpy()).items()})
     for key, preds in roi_preds.items():
         roi = torch.cat(preds, dim=0).reshape(len(subjects), len(test_image_index), -1).mean(dim=0)
         prefix = "roi" if key == "roi_pred" else key.replace("roi_pred_", "roi_")
@@ -1025,6 +1104,7 @@ def main() -> int:
     parser.add_argument("--lambda-roi-col", type=float, default=0.01)
     parser.add_argument("--lambda-spatial", type=float, default=0.1)
     parser.add_argument("--lambda-query-aux", type=float, default=1.0)
+    parser.add_argument("--lambda-fusion-clip", type=float, default=0.0)
     parser.add_argument("--atm-d-model", type=int, default=250)
     parser.add_argument("--atm-heads", type=int, default=4)
     parser.add_argument("--atm-layers", type=int, default=1)
@@ -1037,6 +1117,9 @@ def main() -> int:
         choices=["query", "pooled", "query_pooled", "query_context", "dual"],
         default="query",
     )
+    parser.add_argument("--fusion-head", choices=["none", "late"], default="none")
+    parser.add_argument("--fusion-mix", type=float, default=0.1)
+    parser.add_argument("--fusion-learn-mix", action="store_true")
     parser.add_argument("--roi-feature-mode", choices=["group", "coord", "group_coord"], default="group")
     parser.add_argument("--prototype-metadata-roi", type=Path, default=None)
     parser.add_argument("--device", default="cuda")
@@ -1132,6 +1215,9 @@ def main() -> int:
         semantic_head=args.semantic_head,
         use_spatial=args.mode == "spatial",
         spatial_head=args.spatial_head,
+        fusion_head=args.fusion_head,
+        fusion_mix=args.fusion_mix,
+        fusion_learn_mix=args.fusion_learn_mix,
     ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
@@ -1170,6 +1256,9 @@ def main() -> int:
         "best_clip_rank": ("clip_rank_percentile", out_dir / "model_best_clip_rank.pt"),
         "best_roi_top1": ("roi_top1", out_dir / "model_best_roi_top1.pt"),
         "best_roi_rank": ("roi_rank_percentile", out_dir / "model_best_roi_rank.pt"),
+        "best_fusion_clip_top1": ("fusion_clip_top1", out_dir / "model_best_fusion_clip_top1.pt"),
+        "best_fusion_clip_top5": ("fusion_clip_top5", out_dir / "model_best_fusion_clip_top5.pt"),
+        "best_fusion_clip_rank": ("fusion_clip_rank_percentile", out_dir / "model_best_fusion_clip_rank.pt"),
     }
 
     for epoch in range(args.epochs):
@@ -1185,6 +1274,10 @@ def main() -> int:
             out = model(eeg, subject_ids)
             sem_loss = model.loss_func(out["semantic"], clip_target, model.logit_scale.exp())
             loss = sem_loss
+            fusion_loss = torch.tensor(0.0, device=device)
+            if "fusion" in out and args.lambda_fusion_clip > 0:
+                fusion_loss = model.loss_func(out["fusion"], clip_target, model.logit_scale.exp())
+                loss = loss + args.lambda_fusion_clip * fusion_loss
             roi_loss = torch.tensor(0.0, device=device)
             roi_col_loss = torch.tensor(0.0, device=device)
             spatial_loss = torch.tensor(0.0, device=device)
@@ -1278,6 +1371,10 @@ def main() -> int:
                 "subject_mode": args.subject_mode,
                 "semantic_head": args.semantic_head,
                 "spatial_head": args.spatial_head if args.mode == "spatial" else "none",
+                "fusion_head": args.fusion_head if args.mode == "spatial" else "none",
+                "fusion_mix": args.fusion_mix,
+                "fusion_learn_mix": bool(args.fusion_learn_mix),
+                "lambda_fusion_clip": args.lambda_fusion_clip,
                 "lambda_query_aux": args.lambda_query_aux,
                 "roi_feature_mode": args.roi_feature_mode,
                 "prototype_metadata_roi": str(args.prototype_metadata_roi) if args.prototype_metadata_roi else "",

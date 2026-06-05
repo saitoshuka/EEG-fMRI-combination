@@ -26,6 +26,7 @@ LR=${LR:-3e-4}
 LAMBDA_ROI=${LAMBDA_ROI:-0.05}
 LAMBDA_ROI_COL=${LAMBDA_ROI_COL:-0.0}
 LAMBDA_SPATIAL=${LAMBDA_SPATIAL:-0.05}
+LAMBDA_FUSION_CLIP=${LAMBDA_FUSION_CLIP:-0.0}
 ATM_D_MODEL=${ATM_D_MODEL:-256}
 ATM_HEADS=${ATM_HEADS:-4}
 ATM_LAYERS=${ATM_LAYERS:-1}
@@ -33,6 +34,9 @@ ATM_DROPOUT=${ATM_DROPOUT:-0.25}
 ATM_D_FF=${ATM_D_FF:-256}
 SUBJECT_MODE=${SUBJECT_MODE:-none}
 SEMANTIC_HEAD=${SEMANTIC_HEAD:-shallow}
+FUSION_HEAD=${FUSION_HEAD:-none}
+FUSION_MIX=${FUSION_MIX:-0.1}
+FUSION_LEARN_MIX=${FUSION_LEARN_MIX:-0}
 DEVICE=${DEVICE:-cuda}
 ROI_FEATURE_MODE=${ROI_FEATURE_MODE:-group}
 PROTOTYPE_METADATA_ROI=${PROTOTYPE_METADATA_ROI:-$RESULTS/cortical_prototype_targets/visualproto_k256_seed33/cortical_spatial_targets_train_n16540_k256.npz}
@@ -67,6 +71,10 @@ run_one() {
     return 0
   fi
   echo "training proto256 $TARGET_KIND $head -> $log_file"
+  local fusion_learn_args=()
+  if [[ "$FUSION_LEARN_MIX" == "1" ]]; then
+    fusion_learn_args+=(--fusion-learn-mix)
+  fi
   "$PY" fmri_foundation_workspace/scripts/train_atm_roi_spatial_branch.py \
     --mode spatial \
     --spatial-head "$head" \
@@ -86,6 +94,7 @@ run_one() {
     --lambda-roi "$LAMBDA_ROI" \
     --lambda-roi-col "$LAMBDA_ROI_COL" \
     --lambda-spatial "$LAMBDA_SPATIAL" \
+    --lambda-fusion-clip "$LAMBDA_FUSION_CLIP" \
     --atm-d-model "$ATM_D_MODEL" \
     --atm-heads "$ATM_HEADS" \
     --atm-layers "$ATM_LAYERS" \
@@ -93,6 +102,9 @@ run_one() {
     --atm-d-ff "$ATM_D_FF" \
     --subject-mode "$SUBJECT_MODE" \
     --semantic-head "$SEMANTIC_HEAD" \
+    --fusion-head "$FUSION_HEAD" \
+    --fusion-mix "$FUSION_MIX" \
+    "${fusion_learn_args[@]}" \
     --roi-feature-mode "$ROI_FEATURE_MODE" \
     --prototype-metadata-roi "$PROTOTYPE_METADATA_ROI" \
     --device "$DEVICE" \

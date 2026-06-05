@@ -151,6 +151,9 @@ def main() -> None:
         semantic_head=str(summary.get("semantic_head", "shallow")),
         use_spatial=str(summary.get("mode", "spatial")) == "spatial",
         spatial_head=str(summary.get("spatial_head", "query")),
+        fusion_head=str(summary.get("fusion_head", "none")),
+        fusion_mix=float(summary.get("fusion_mix", 0.1)),
+        fusion_learn_mix=bool(summary.get("fusion_learn_mix", False)),
     ).to(device)
     checkpoint_path = args.model_dir / args.checkpoint
     state = torch.load(checkpoint_path, map_location=device, weights_only=False)
@@ -170,6 +173,7 @@ def main() -> None:
             raise RuntimeError("Expected cached or loaded test EEG stack")
 
         subject_sem = []
+        subject_fusion = []
         subject_outputs: dict[str, list[np.ndarray]] = {}
         with torch.no_grad():
             for subject_idx, subject in enumerate(subjects):
@@ -183,6 +187,8 @@ def main() -> None:
                         sid[start : start + args.batch_size].to(device),
                     )
                     sem_parts.append(out["semantic"].detach().cpu())
+                    if "fusion" in out:
+                        subject_fusion.append(out["fusion"].detach().cpu())
                     for key in ["roi_pred", "roi_pred_query", "roi_pred_pooled"]:
                         if key in out:
                             roi_parts.setdefault(key, []).append(out[key].detach().cpu())
@@ -220,6 +226,10 @@ def main() -> None:
                 values = roi_outputs[key]
                 payload[f"roi_pred_{suffix}"] = values.mean(axis=0)
                 payload[f"subject_roi_pred_{suffix}"] = values
+        if subject_fusion:
+            fusion = torch.cat(subject_fusion, dim=0).reshape(len(subjects), len(test_image_index), -1).numpy()
+            payload["fusion_pred"] = fusion.mean(axis=0).astype(np.float32)
+            payload["subject_fusion_pred"] = fusion.astype(np.float32)
         payloads["test"] = payload
 
     if args.split in {"train", "both"}:
@@ -238,6 +248,8 @@ def main() -> None:
             pin_memory=device.type == "cuda",
         )
         sem_sum = torch.zeros((len(train_image_index), 1024), dtype=torch.float32)
+        fusion_sum = torch.zeros((len(train_image_index), 1024), dtype=torch.float32)
+        has_fusion = False
         sem_count = torch.zeros((len(train_image_index), 1), dtype=torch.float32)
         roi_sums: dict[str, torch.Tensor] = {}
         with torch.no_grad():
@@ -245,6 +257,9 @@ def main() -> None:
                 out = model(eeg.to(device), sid.to(device))
                 idx = image_local.long()
                 sem_sum.index_add_(0, idx, out["semantic"].detach().cpu())
+                if "fusion" in out:
+                    has_fusion = True
+                    fusion_sum.index_add_(0, idx, out["fusion"].detach().cpu())
                 sem_count.index_add_(0, idx, torch.ones((len(idx), 1), dtype=torch.float32))
                 for key in ["roi_pred", "roi_pred_query", "roi_pred_pooled"]:
                     if key in out:
@@ -263,6 +278,8 @@ def main() -> None:
             "checkpoint": np.asarray(str(checkpoint_path)),
             "aggregation_count": sem_count.numpy().astype(np.float32),
         }
+        if has_fusion:
+            payload["fusion_pred"] = (fusion_sum / sem_count.clamp_min(1)).numpy().astype(np.float32)
         if "roi_pred" in roi_sums:
             payload.update(
                 {
