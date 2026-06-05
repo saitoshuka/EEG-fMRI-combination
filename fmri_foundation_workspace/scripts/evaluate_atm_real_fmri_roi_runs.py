@@ -159,6 +159,7 @@ def evaluate_run(
     cache_dir: Path,
     device: torch.device,
     checkpoint_name: str,
+    prediction_key: str = "roi_pred",
 ) -> tuple[dict[str, str | int], np.ndarray, np.ndarray, np.ndarray]:
     summary = json.loads((run_dir / "summary.json").read_text())
     payload = np.load(target_npz, allow_pickle=True)
@@ -198,13 +199,16 @@ def evaluate_run(
         eeg = test_eeg_stack[subject_idx]
         sid = torch.full((len(eeg),), subject_to_id(subject), dtype=torch.long)
         out = model(eeg.to(device), sid.to(device))
-        preds.append(out["roi_pred"].detach().cpu())
+        if prediction_key not in out:
+            raise KeyError(f"{prediction_key} not found in model output for {run_dir.name}: {sorted(out)}")
+        preds.append(out[prediction_key].detach().cpu())
     pred = torch.stack(preds, dim=0).mean(dim=0).numpy().astype(np.float32)
     target = roi_target.numpy().astype(np.float32)
     meta = {
         "run": run_dir.name,
         "checkpoint": checkpoint_name,
         "spatial_head": summary.get("spatial_head", ""),
+        "prediction_key": prediction_key,
         "n_test": int(len(image_index)),
         "n_roi": int(target.shape[1]),
     }
@@ -221,6 +225,7 @@ def main() -> None:
     parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIR)
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--checkpoint", action="append", default=["model_best_roi_rank.pt", "model_final.pt"])
+    parser.add_argument("--prediction-key", action="append", default=None)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--seed", type=int, default=33)
     args = parser.parse_args()
@@ -233,42 +238,53 @@ def main() -> None:
     target_npz = args.target_dir / target_file
     args.out_dir.mkdir(parents=True, exist_ok=True)
     rows = []
+    prediction_keys = args.prediction_key or ["roi_pred"]
     for run_name in args.run_name:
         run_dir = args.run_root / run_name
         for checkpoint in args.checkpoint:
             if not (run_dir / checkpoint).exists():
                 continue
-            meta, pred, target, roi_names = evaluate_run(
-                run_dir,
-                target_npz,
-                args.data_root,
-                args.cache_dir,
-                device,
-                checkpoint,
-            )
-            pred_name = f"{run_name}_{checkpoint.replace('.pt', '')}_{args.target_label}_predictions.npz"
-            np.savez_compressed(
-                args.out_dir / pred_name,
-                pred=pred,
-                target=target,
-                roi_names=roi_names,
-            )
-            labels = roi_family_labels(roi_names)
-            for family, mask in subset_masks(roi_names, args.target_label).items():
-                row = {
-                    **meta,
-                    "target_label": args.target_label,
-                    "family": family,
-                    "n_family_roi": int(mask.sum()),
-                    **corr_metrics(pred[:, mask], target[:, mask]),
-                    **identity_metrics(
-                        pred[:, mask],
-                        target[:, mask],
-                        labels[mask],
-                        seed=stable_seed(args.seed, run_name, checkpoint, family),
-                    ),
-                }
-                rows.append(row)
+            for prediction_key in prediction_keys:
+                try:
+                    meta, pred, target, roi_names = evaluate_run(
+                        run_dir,
+                        target_npz,
+                        args.data_root,
+                        args.cache_dir,
+                        device,
+                        checkpoint,
+                        prediction_key=prediction_key,
+                    )
+                except KeyError:
+                    if prediction_key == "roi_pred":
+                        raise
+                    continue
+                pred_name = (
+                    f"{run_name}_{checkpoint.replace('.pt', '')}_"
+                    f"{prediction_key}_{args.target_label}_predictions.npz"
+                )
+                np.savez_compressed(
+                    args.out_dir / pred_name,
+                    pred=pred,
+                    target=target,
+                    roi_names=roi_names,
+                )
+                labels = roi_family_labels(roi_names)
+                for family, mask in subset_masks(roi_names, args.target_label).items():
+                    row = {
+                        **meta,
+                        "target_label": args.target_label,
+                        "family": family,
+                        "n_family_roi": int(mask.sum()),
+                        **corr_metrics(pred[:, mask], target[:, mask]),
+                        **identity_metrics(
+                            pred[:, mask],
+                            target[:, mask],
+                            labels[mask],
+                            seed=stable_seed(args.seed, run_name, checkpoint, prediction_key, family),
+                        ),
+                    }
+                    rows.append(row)
     summary = {"rows": rows}
     (args.out_dir / f"summary_{args.target_label}.json").write_text(json.dumps(summary, indent=2) + "\n")
     if rows:

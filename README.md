@@ -275,25 +275,29 @@ Relevant file:
 - `fmri_foundation_workspace/notes/eeg_image_bridge/atm_proto256_residual_query_vs_pooled_20260605.md`
 - `fmri_foundation_workspace/notes/eeg_image_bridge/atm_proto256_coordinate_query_20260605.md`
 
-### 8. Hybrid query pilot
+### 8. Hybrid and dual-head query pilots
 
 To address the pooled-vs-query scalar rank gap, two seed33 real-fMRI visual64
-hybrid heads were tested:
+hybrid heads and one dual-head model were tested:
 
-| head | visual64 rank | shifted | ROI corr | identity diag-offdiag | decision |
+| head/output | visual64 rank | shifted | ROI corr | identity diag-offdiag | decision |
 |---|---:|---:|---:|---:|---|
 | query | 0.7384 | 0.4838 | 0.1488 | 0.1315 | interpretable but lower scalar rank |
 | pooled | 0.7739 | 0.4836 | 0.0932 | 0.0896 | strongest scalar rank |
 | query_pooled | 0.7620 | 0.4809 | 0.0900 | 0.0882 | rank recovers, identity is diluted |
 | query_context | 0.7186 | 0.4839 | 0.1293 | 0.1109 | identity partly preserved, rank drops |
+| dual / pooled output | 0.7652 | 0.4928 | 0.0814 | 0.0792 | preserves scalar rank/top5, weak identity |
+| dual / query output | 0.7054 | 0.4880 | 0.1346 | 0.1198 | preserves some identity, weak rank |
 
-Decision: do not continue simple pooled mixing or one-token global context. The
-next useful architecture should use dual-head supervision, hierarchical/local
-query constraints, or finer cortical targets.
+Decision: do not continue simple pooled mixing or one-token global context.
+Dual-head is a better framing direction, but still not a metric win. The next
+useful architecture should use stronger dual-objective training,
+hierarchical/local query constraints, or finer cortical targets.
 
 Relevant file:
 
 - `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_hybrid_query_pilots_20260605.md`
+- `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_dual_head_pilot_20260605.md`
 
 ## Reproducibility Notes
 

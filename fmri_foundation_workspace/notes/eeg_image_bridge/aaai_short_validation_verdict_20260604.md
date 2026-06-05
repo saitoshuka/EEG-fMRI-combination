@@ -179,7 +179,13 @@ Current status after the real-fMRI and proto256 updates:
   values; `query_context` preserved more identity but reduced rank. This argues
   against more simple pooled mixing and for dual-head, hierarchical/local query,
   or finer-target designs.
+- A seed33 dual-head pilot is better aligned with the story but still not a
+  metric win. The pooled output preserves most scalar rank/top5
+  (0.7652 / 0.2468 vs pooled 0.7739 / 0.2468), while the query output preserves
+  stronger identity than pooled (0.1198 vs 0.0896). However, pooled remains best
+  for scalar rank and original query remains best for identity.
 
 Relevant file:
 
 - `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_hybrid_query_pilots_20260605.md`
+- `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_dual_head_pilot_20260605.md`

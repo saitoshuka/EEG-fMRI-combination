@@ -539,6 +539,47 @@ class OrderedRoiQueryContextBranch(nn.Module):
         return pred, z_roi
 
 
+class DualPooledQueryBranch(nn.Module):
+    """Separate pooled and ordered-query ROI readouts on the same EEG tokens."""
+
+    def __init__(
+        self,
+        roi_names: np.ndarray,
+        vertex_counts: np.ndarray,
+        group_features: torch.Tensor | None = None,
+        token_dim: int = 250,
+        hidden_dim: int = 256,
+        n_heads: int = 4,
+        dropout: float = 0.1,
+    ):
+        super().__init__()
+        self.query_branch = OrderedRoiQueryBranch(
+            roi_names,
+            vertex_counts,
+            group_features=group_features,
+            token_dim=token_dim,
+            hidden_dim=hidden_dim,
+            n_heads=n_heads,
+            dropout=dropout,
+        )
+        self.pooled_branch = PooledRoiBranch(
+            n_roi=len(roi_names),
+            token_dim=token_dim,
+            hidden_dim=hidden_dim,
+            n_heads=n_heads,
+            dropout=dropout,
+        )
+
+    def forward(self, tokens: Tensor) -> tuple[Tensor, Tensor, dict[str, Tensor]]:
+        query_pred, query_tokens = self.query_branch(tokens)
+        pooled_pred, pooled_tokens = self.pooled_branch(tokens)
+        return pooled_pred, query_tokens, {
+            "roi_pred_query": query_pred,
+            "roi_pred_pooled": pooled_pred,
+            "roi_tokens_pooled": pooled_tokens,
+        }
+
+
 class AtmSemanticSpatial(nn.Module):
     def __init__(
         self,
@@ -619,6 +660,14 @@ class AtmSemanticSpatial(nn.Module):
                     token_dim=atm_d_model,
                     n_heads=atm_heads,
                 )
+            elif spatial_head == "dual":
+                self.roi_branch = DualPooledQueryBranch(
+                    roi_names,
+                    vertex_counts,
+                    group_features=group_features,
+                    token_dim=atm_d_model,
+                    n_heads=atm_heads,
+                )
             else:
                 raise ValueError(f"Unknown spatial_head: {spatial_head}")
 
@@ -630,7 +679,12 @@ class AtmSemanticSpatial(nn.Module):
             semantic = self.semantic_pool(tokens)
         out = {"semantic": F.normalize(semantic, dim=-1), "tokens": tokens}
         if self.use_spatial:
-            roi_pred, roi_tokens = self.roi_branch(tokens)
+            branch_out = self.roi_branch(tokens)
+            if len(branch_out) == 3:
+                roi_pred, roi_tokens, extras = branch_out
+                out.update(extras)
+            else:
+                roi_pred, roi_tokens = branch_out
             out["roi_pred"] = roi_pred
             out["roi_tokens"] = roi_tokens
         return out
@@ -876,6 +930,20 @@ def contrastive_loss(a: Tensor, b: Tensor, temperature: float = 0.07) -> Tensor:
     return (F.cross_entropy(logits, labels) + F.cross_entropy(logits.T, labels)) / 2
 
 
+def roi_supervision_loss(
+    pred: Tensor,
+    target: Tensor,
+    lambda_roi: float,
+    lambda_roi_col: float,
+    lambda_spatial: float,
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    row_loss = corr_loss_rows(pred, target)
+    col_loss = corr_loss_cols(pred, target)
+    spatial_loss = contrastive_loss(pred, target)
+    total = lambda_roi * row_loss + lambda_roi_col * col_loss + lambda_spatial * spatial_loss
+    return total, row_loss, col_loss, spatial_loss
+
+
 def retrieval_metrics(pred: np.ndarray, target: np.ndarray) -> dict[str, float]:
     pred = pred / np.maximum(np.linalg.norm(pred, axis=1, keepdims=True), 1e-8)
     target = target / np.maximum(np.linalg.norm(target, axis=1, keepdims=True), 1e-8)
@@ -909,7 +977,7 @@ def evaluate_clip_retrieval(
 ) -> dict[str, float]:
     model.eval()
     sem_preds = []
-    roi_preds = []
+    roi_preds: dict[str, list[Tensor]] = {}
     with torch.no_grad():
         for subject_idx, subject in enumerate(subjects):
             if test_eeg_stack is None:
@@ -922,13 +990,15 @@ def evaluate_clip_retrieval(
                 sids = sid[start : start + batch_size].to(device)
                 out = model(x, sids)
                 sem_preds.append(out["semantic"].cpu())
-                if "roi_pred" in out:
-                    roi_preds.append(out["roi_pred"].cpu())
+                for key in ["roi_pred", "roi_pred_query", "roi_pred_pooled"]:
+                    if key in out:
+                        roi_preds.setdefault(key, []).append(out[key].cpu())
     sem = torch.cat(sem_preds, dim=0).reshape(len(subjects), len(test_image_index), -1).mean(dim=0)
     metrics = {f"clip_{k}": v for k, v in retrieval_metrics(sem.numpy(), clip_test.numpy()).items()}
-    if roi_preds:
-        roi = torch.cat(roi_preds, dim=0).reshape(len(subjects), len(test_image_index), -1).mean(dim=0)
-        metrics.update({f"roi_{k}": v for k, v in retrieval_metrics(roi.numpy(), roi_test.numpy()).items()})
+    for key, preds in roi_preds.items():
+        roi = torch.cat(preds, dim=0).reshape(len(subjects), len(test_image_index), -1).mean(dim=0)
+        prefix = "roi" if key == "roi_pred" else key.replace("roi_pred_", "roi_")
+        metrics.update({f"{prefix}_{k}": v for k, v in retrieval_metrics(roi.numpy(), roi_test.numpy()).items()})
     return metrics
 
 
@@ -954,6 +1024,7 @@ def main() -> int:
     parser.add_argument("--lambda-roi", type=float, default=0.1)
     parser.add_argument("--lambda-roi-col", type=float, default=0.01)
     parser.add_argument("--lambda-spatial", type=float, default=0.1)
+    parser.add_argument("--lambda-query-aux", type=float, default=1.0)
     parser.add_argument("--atm-d-model", type=int, default=250)
     parser.add_argument("--atm-heads", type=int, default=4)
     parser.add_argument("--atm-layers", type=int, default=1)
@@ -963,7 +1034,7 @@ def main() -> int:
     parser.add_argument("--semantic-head", choices=["shallow", "attn"], default="shallow")
     parser.add_argument(
         "--spatial-head",
-        choices=["query", "pooled", "query_pooled", "query_context"],
+        choices=["query", "pooled", "query_pooled", "query_context", "dual"],
         default="query",
     )
     parser.add_argument("--roi-feature-mode", choices=["group", "coord", "group_coord"], default="group")
@@ -1115,17 +1186,26 @@ def main() -> int:
             sem_loss = model.loss_func(out["semantic"], clip_target, model.logit_scale.exp())
             loss = sem_loss
             roi_loss = torch.tensor(0.0, device=device)
+            roi_col_loss = torch.tensor(0.0, device=device)
             spatial_loss = torch.tensor(0.0, device=device)
             if args.mode == "spatial":
-                roi_loss = corr_loss_rows(out["roi_pred"], roi_target)
-                roi_col_loss = corr_loss_cols(out["roi_pred"], roi_target)
-                spatial_loss = contrastive_loss(out["roi_pred"], roi_target)
-                loss = (
-                    sem_loss
-                    + args.lambda_roi * roi_loss
-                    + args.lambda_roi_col * roi_col_loss
-                    + args.lambda_spatial * spatial_loss
+                roi_total, roi_loss, roi_col_loss, spatial_loss = roi_supervision_loss(
+                    out["roi_pred"],
+                    roi_target,
+                    args.lambda_roi,
+                    args.lambda_roi_col,
+                    args.lambda_spatial,
                 )
+                loss = sem_loss + roi_total
+                if "roi_pred_query" in out and args.lambda_query_aux > 0:
+                    query_total, _, _, _ = roi_supervision_loss(
+                        out["roi_pred_query"],
+                        roi_target,
+                        args.lambda_roi,
+                        args.lambda_roi_col,
+                        args.lambda_spatial,
+                    )
+                    loss = loss + args.lambda_query_aux * query_total
             loss.backward()
             optimizer.step()
             loss_sum += float(loss.item())
@@ -1198,6 +1278,7 @@ def main() -> int:
                 "subject_mode": args.subject_mode,
                 "semantic_head": args.semantic_head,
                 "spatial_head": args.spatial_head if args.mode == "spatial" else "none",
+                "lambda_query_aux": args.lambda_query_aux,
                 "roi_feature_mode": args.roi_feature_mode,
                 "prototype_metadata_roi": str(args.prototype_metadata_roi) if args.prototype_metadata_roi else "",
                 "seed": args.seed,
