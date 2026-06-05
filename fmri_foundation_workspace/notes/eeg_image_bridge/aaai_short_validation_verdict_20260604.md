@@ -190,9 +190,17 @@ Current status after the real-fMRI and proto256 updates:
   full-grid +0.020 top1 but the gain is not CV-stable, and raw strong parcel38
   has no top1/rank gain. This keeps cortical grounding promising but confirms
   that the present spatial branch is not yet an AAAI-grade performance booster.
+- A proto256 dual-head run partially improves the engineering tradeoff but not
+  the main-conference claim. The dual main/pooled output reaches ROI rank
+  0.6520, essentially tying the pooled baseline (0.6515), while the query aux
+  output reaches only 0.5893. Dual reranking gives a small split-CV top1 gain
+  (+0.013) but top5 is slightly worse and rank gain is tiny. This says dual
+  heads are a reasonable implementation direction, but the current query
+  constraint still is not the performance-critical mechanism.
 
 Relevant file:
 
 - `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_hybrid_query_pilots_20260605.md`
 - `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_dual_head_pilot_20260605.md`
 - `fmri_foundation_workspace/notes/eeg_image_bridge/atm_roi_prediction_rerank_metric_check_20260605.md`
+- `fmri_foundation_workspace/notes/eeg_image_bridge/proto256_dual_head_metric_check_20260605.md`

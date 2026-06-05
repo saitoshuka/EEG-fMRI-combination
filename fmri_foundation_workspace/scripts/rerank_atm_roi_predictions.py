@@ -197,6 +197,7 @@ def split_cv_rows(
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--predictions", type=Path, required=True)
+    parser.add_argument("--roi-pred-key", default="roi_pred")
     parser.add_argument("--asset-root", type=Path, default=DEFAULT_ASSET_ROOT)
     parser.add_argument("--settings", default="10:0.1,10:0.2,10:0.3,20:0.1,20:0.2,20:0.3,100:0.1,100:0.2,100:0.3,100:0.5")
     parser.add_argument("--perm-n", type=int, default=200)
@@ -209,13 +210,13 @@ def main() -> int:
     args = parser.parse_args()
 
     pred_npz = np.load(args.predictions, allow_pickle=True)
-    required = {"semantic_pred", "roi_pred", "target_roi", "image_index"}
+    required = {"semantic_pred", args.roi_pred_key, "target_roi", "image_index"}
     missing = sorted(required.difference(pred_npz.files))
     if missing:
         raise ValueError(f"Missing fields in {args.predictions}: {missing}")
 
     semantic_pred = np.asarray(pred_npz["semantic_pred"], dtype=np.float32)
-    roi_pred = np.asarray(pred_npz["roi_pred"], dtype=np.float32)
+    roi_pred = np.asarray(pred_npz[args.roi_pred_key], dtype=np.float32)
     target_roi = np.asarray(pred_npz["target_roi"], dtype=np.float32)
     image_index = np.asarray(pred_npz["image_index"], dtype=int)
     label = args.label or args.predictions.stem
@@ -302,6 +303,7 @@ def main() -> int:
         "predictions": str(args.predictions),
         "asset_root": str(args.asset_root),
         "label": label,
+        "roi_pred_key": args.roi_pred_key,
         "n_images": int(len(image_index)),
         "roi_shape": list(roi_pred.shape),
         "settings": settings,
@@ -321,6 +323,7 @@ def main() -> int:
         f"# ATM ROI Prediction Rerank: {label}",
         "",
         f"Predictions: `{args.predictions}`",
+        f"ROI prediction key: `{args.roi_pred_key}`",
         f"Images: `{len(image_index)}`; ROI shape: `{list(roi_pred.shape)}`",
         "",
         "## Full Test Grid",

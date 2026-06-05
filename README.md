@@ -322,6 +322,28 @@ Relevant file:
 - `fmri_foundation_workspace/notes/eeg_image_bridge/atm_roi_prediction_rerank_metric_check_20260605.md`
 - `fmri_foundation_workspace/scripts/rerank_atm_roi_predictions.py`
 
+### 10. Proto256 dual-head check
+
+A follow-up tested whether a dual spatial head can keep the pooled head's
+scalar performance while preserving query-specific cortical identity.
+
+| model/head | target | best ROI rank | shifted | CLIP top1 | CLIP top5 | decision |
+|---|---|---:|---:|---:|---:|---|
+| ordered query baseline | residual k256 | 0.6020 | 0.5014 | 0.425 | 0.815 | strongest prior query identity |
+| pooled baseline | residual k256 | 0.6515 | 0.5031 | 0.415 | 0.760 | strongest prior scalar ROI rank |
+| dual main/pooled | residual k256 | 0.6520 | 0.5008 | 0.400 | 0.780 | matches pooled ROI rank, no retrieval win |
+| dual query aux | residual k256 | 0.5893 | 0.5009 | n/a | n/a | weaker than ordered-query baseline |
+
+The dual head is a useful negative/partial result: it shows the query auxiliary
+loss does not destroy pooled scalar ROI prediction, but it does not make query
+constraints performance-critical. Reranking with the dual main output gives only
+a tiny test-split CV top1 gain (+0.013) with top5 slightly lower (-0.002), so it
+is not yet a main-conference metric result.
+
+Relevant file:
+
+- `fmri_foundation_workspace/notes/eeg_image_bridge/proto256_dual_head_metric_check_20260605.md`
+
 ## Reproducibility Notes
 
 The local environment was managed with conda. The core EEG environment was

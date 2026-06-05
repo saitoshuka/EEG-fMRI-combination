@@ -120,27 +120,31 @@ def main() -> None:
         raise RuntimeError("Expected cached or loaded test EEG stack")
 
     subject_sem = []
-    subject_roi = []
+    subject_outputs: dict[str, list[np.ndarray]] = {}
     with torch.no_grad():
         for subject_idx, subject in enumerate(subjects):
             eeg = test_eeg_stack[subject_idx]
             sid = torch.full((len(eeg),), subject_to_id(subject), dtype=torch.long)
             sem_parts = []
-            roi_parts = []
+            roi_parts: dict[str, list[torch.Tensor]] = {}
             for start in range(0, len(eeg), args.batch_size):
                 out = model(
                     eeg[start : start + args.batch_size].to(device),
                     sid[start : start + args.batch_size].to(device),
                 )
                 sem_parts.append(out["semantic"].detach().cpu())
-                if "roi_pred" in out:
-                    roi_parts.append(out["roi_pred"].detach().cpu())
+                for key in ["roi_pred", "roi_pred_query", "roi_pred_pooled"]:
+                    if key in out:
+                        roi_parts.setdefault(key, []).append(out[key].detach().cpu())
             subject_sem.append(torch.cat(sem_parts, dim=0).numpy())
-            if roi_parts:
-                subject_roi.append(torch.cat(roi_parts, dim=0).numpy())
+            for key, parts in roi_parts.items():
+                subject_outputs.setdefault(key, []).append(torch.cat(parts, dim=0).numpy())
 
     sem = np.stack(subject_sem, axis=0).astype(np.float32)
-    roi = np.stack(subject_roi, axis=0).astype(np.float32) if subject_roi else None
+    roi_outputs = {
+        key: np.stack(values, axis=0).astype(np.float32)
+        for key, values in subject_outputs.items()
+    }
     label = args.label or f"{args.model_dir.name}_{checkpoint_path.stem}"
     out_dir = args.out_dir / "atm_roi_predictions"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -154,7 +158,8 @@ def main() -> None:
         "source_model_dir": np.asarray(str(args.model_dir)),
         "checkpoint": np.asarray(str(checkpoint_path)),
     }
-    if roi is not None:
+    if "roi_pred" in roi_outputs:
+        roi = roi_outputs["roi_pred"]
         payload.update(
             {
                 "roi_pred": roi.mean(axis=0),
@@ -163,6 +168,12 @@ def main() -> None:
                 "target_roi": test_roi_npz[target_key].astype(np.float32),
             }
         )
+    for key in ["roi_pred_query", "roi_pred_pooled"]:
+        if key in roi_outputs:
+            suffix = key.removeprefix("roi_pred_")
+            values = roi_outputs[key]
+            payload[f"roi_pred_{suffix}"] = values.mean(axis=0)
+            payload[f"subject_roi_pred_{suffix}"] = values
     np.savez_compressed(out_path, **payload)
     print(
         json.dumps(
@@ -174,6 +185,11 @@ def main() -> None:
                 "n_images": int(len(test_image_index)),
                 "n_subjects": int(len(subjects)),
                 "roi_shape": list(payload["roi_pred"].shape) if "roi_pred" in payload else None,
+                "extra_roi_outputs": [
+                    key
+                    for key in ["roi_pred_query", "roi_pred_pooled"]
+                    if key in payload
+                ],
                 "semantic_shape": list(payload["semantic_pred"].shape),
             },
             indent=2,
