@@ -127,6 +127,9 @@ wins fixed ROI-identity structure and remains the interpretability branch.
 
 Relevant files:
 
+- `fmri_foundation_workspace/notes/eeg_image_bridge/proto256_pooled_realfmri_multiseed_final_20260605.md`
+- `fmri_foundation_workspace/notes/eeg_image_bridge/proto256_pooled_realfmri_probe_integrity_audit_20260605.md`
+- `fmri_foundation_workspace/results/eeg_image_bridge/things_fmri_external_validation/atm_feature_to_realfmri_probe/multiseed_summary/pooled_proto256_residual_realfmri_multiseed.md`
 - `fmri_foundation_workspace/scripts/build_things_fmri_atm_shared_roi_targets.py`
 - `fmri_foundation_workspace/scripts/run_atm_real_fmri_shared_roi207.sh`
 - `fmri_foundation_workspace/scripts/evaluate_atm_real_fmri_roi_runs.py`
