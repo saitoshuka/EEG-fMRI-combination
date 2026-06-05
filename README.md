@@ -381,6 +381,27 @@ Relevant file:
 
 - `fmri_foundation_workspace/notes/eeg_image_bridge/vae_latent_proxy_generation_check_20260605.md`
 
+### 13. ATM feature to real-fMRI probe
+
+A train-only ridge probe tested whether exported ATM features predict measured
+THINGS-fMRI visual64/shared207 targets.  This directly checks whether the
+cortical branch carries real-fMRI signal beyond the semantic EEG embedding.
+
+For measured visual64, the pooled residual proto256 ROI feature reaches rank
+`0.6413`, above the same model's semantic feature (`0.6003`) and shifted null
+(`0.4797`), while image CLIP oracle reaches `0.6765`.  For shared207, pooled
+ROI reaches `0.6090`, above semantic `0.5572`.  However, ordered-query ROI
+features are weaker (`0.5506` visual64), and simple semantic+ROI concatenation
+does not improve the probe.
+
+Interpretation: the pooled cortical/prototype branch carries measurable
+real-fMRI transfer signal, but the ordered query constraint remains an
+identity/interpretability mechanism rather than the current performance head.
+
+Relevant file:
+
+- `fmri_foundation_workspace/notes/eeg_image_bridge/atm_feature_to_realfmri_probe_20260605.md`
+
 ## Reproducibility Notes
 
 The local environment was managed with conda. The core EEG environment was
