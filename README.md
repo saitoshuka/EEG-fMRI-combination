@@ -362,6 +362,25 @@ Relevant file:
 
 - `fmri_foundation_workspace/notes/eeg_image_bridge/aaai_metric_gate_and_generation_route_20260605.md`
 
+### 12. VAE latent proxy for generation
+
+A first generation-facing proxy tested whether exported EEG semantic/prototype
+features can predict SDXL VAE image latents.  The proxy is meaningful in
+principle because true image CLIP features predict VAE latents strongly
+(`rank=0.9101`, top1 `0.120`).  The current EEG-predicted semantic and
+proto256 ROI features do not: semantic-only rank is `0.4775`, ROI-only rank is
+`0.5182`, and semantic+ROI rank is `0.4715`.
+
+This is a negative result for simple post-hoc ridge-to-VAE generation.  It does
+not rule out generation benefits from cortical supervision, but a fair
+generation experiment needs a trainable matched-budget fusion/prior module
+rather than directly mapping the current exported ROI predictions to VAE
+latents.
+
+Relevant file:
+
+- `fmri_foundation_workspace/notes/eeg_image_bridge/vae_latent_proxy_generation_check_20260605.md`
+
 ## Reproducibility Notes
 
 The local environment was managed with conda. The core EEG environment was
