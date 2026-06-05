@@ -387,20 +387,26 @@ A train-only ridge probe tested whether exported ATM features predict measured
 THINGS-fMRI visual64/shared207 targets.  This directly checks whether the
 cortical branch carries real-fMRI signal beyond the semantic EEG embedding.
 
-For measured visual64, the pooled residual proto256 ROI feature reaches rank
-`0.6413`, above the same model's semantic feature (`0.6003`) and shifted null
-(`0.4797`), while image CLIP oracle reaches `0.6765`.  For shared207, pooled
-ROI reaches `0.6090`, above semantic `0.5572`.  However, ordered-query ROI
-features are weaker (`0.5506` visual64), and simple semantic+ROI concatenation
-does not improve the probe.
+The final pooled residual proto256 check uses three seeds (`11,33,77`).  For
+shared207, the ROI feature is consistently above semantic-only in all three
+seeds: mean rank `0.5995` vs semantic `0.5587`, with shifted null near `0.511`.
+For visual64, the ROI feature has higher mean rank than semantic-only
+(`0.6202` vs `0.6005`), but the effect is not seed-stable: seeds 11 and 33 show
+ROI > semantic, while seed 77 reverses the order.  Image CLIP oracle remains
+higher (`0.6765` visual64, `0.6224` shared207).
 
 Interpretation: the pooled cortical/prototype branch carries measurable
-real-fMRI transfer signal, but the ordered query constraint remains an
-identity/interpretability mechanism rather than the current performance head.
+real-fMRI pattern-rank transfer signal, especially on shared207.  The evidence
+does not support a broad claim that ROI features improve all fMRI metrics:
+ROI-wise correlation is still higher for semantic features, and simple
+semantic+ROI concatenation does not improve the probe.  The ordered query
+constraint remains an identity/interpretability mechanism rather than the
+current performance head.
 
 Relevant file:
 
 - `fmri_foundation_workspace/notes/eeg_image_bridge/atm_feature_to_realfmri_probe_20260605.md`
+- `fmri_foundation_workspace/notes/eeg_image_bridge/proto256_pooled_realfmri_multiseed_final_20260605.md`
 
 ## Reproducibility Notes
 
