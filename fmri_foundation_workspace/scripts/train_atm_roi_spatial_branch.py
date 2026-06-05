@@ -425,6 +425,120 @@ class PooledRoiBranch(nn.Module):
         return pred, pooled.unsqueeze(1)
 
 
+class QueryPooledResidualBranch(nn.Module):
+    """Ordered ROI queries plus a small learnable pooled residual.
+
+    The ordered query path remains the anchor (`query_i -> ROI_i`).  A pooled
+    global ROI vector can add a learned residual when it helps scalar pattern
+    retrieval.  This tests whether the pooled readout's strength can be combined
+    with query-specific identity rather than replacing the query branch.
+    """
+
+    def __init__(
+        self,
+        roi_names: np.ndarray,
+        vertex_counts: np.ndarray,
+        group_features: torch.Tensor | None = None,
+        token_dim: int = 250,
+        hidden_dim: int = 256,
+        n_heads: int = 4,
+        dropout: float = 0.1,
+        init_pooled_scale: float = 0.12,
+    ):
+        super().__init__()
+        self.query_branch = OrderedRoiQueryBranch(
+            roi_names,
+            vertex_counts,
+            group_features=group_features,
+            token_dim=token_dim,
+            hidden_dim=hidden_dim,
+            n_heads=n_heads,
+            dropout=dropout,
+        )
+        self.pooled_branch = PooledRoiBranch(
+            n_roi=len(roi_names),
+            token_dim=token_dim,
+            hidden_dim=hidden_dim,
+            n_heads=n_heads,
+            dropout=dropout,
+        )
+        init = float(np.log(init_pooled_scale / max(1.0 - init_pooled_scale, 1e-6)))
+        self.pooled_scale_logit = nn.Parameter(torch.full((len(roi_names),), init))
+
+    def forward(self, tokens: Tensor) -> tuple[Tensor, Tensor]:
+        query_pred, query_tokens = self.query_branch(tokens)
+        pooled_pred, _ = self.pooled_branch(tokens)
+        pooled_scale = torch.sigmoid(self.pooled_scale_logit).unsqueeze(0)
+        pred = query_pred + pooled_scale * pooled_pred
+        return pred, query_tokens
+
+
+class OrderedRoiQueryContextBranch(nn.Module):
+    """Ordered ROI queries with an extra global context token.
+
+    This keeps the prediction path query-specific: every ROI is still predicted
+    from `query_i`.  Unlike `query_pooled`, the global pooled context is not
+    directly added as an ROI vector; it is only an extra key/value token that
+    ROI queries can attend to.
+    """
+
+    def __init__(
+        self,
+        roi_names: np.ndarray,
+        vertex_counts: np.ndarray,
+        group_features: torch.Tensor | None = None,
+        token_dim: int = 250,
+        hidden_dim: int = 256,
+        n_heads: int = 4,
+        dropout: float = 0.1,
+    ):
+        super().__init__()
+        self.n_roi = len(roi_names)
+        self.query = nn.Parameter(torch.randn(self.n_roi, hidden_dim) * 0.02)
+        self.global_query = nn.Parameter(torch.randn(1, hidden_dim) * 0.02)
+        self.token_proj = nn.Linear(token_dim, hidden_dim)
+        self.global_attn = nn.MultiheadAttention(hidden_dim, n_heads, dropout=dropout, batch_first=True)
+        self.cross_attn = nn.MultiheadAttention(hidden_dim, n_heads, dropout=dropout, batch_first=True)
+        self.hemi_embed = nn.Embedding(3, hidden_dim)
+        if group_features is None:
+            group_features = one_hot_group_features(roi_names)
+        self.group_proj = nn.Linear(group_features.shape[1], hidden_dim, bias=False)
+        counts = torch.tensor(vertex_counts.astype("float32"))
+        counts = torch.log1p(counts)
+        counts = (counts - counts.mean()) / (counts.std() + 1e-6)
+        self.size_mlp = nn.Sequential(nn.Linear(1, hidden_dim), nn.GELU(), nn.Linear(hidden_dim, hidden_dim))
+        self.global_norm = nn.LayerNorm(hidden_dim)
+        self.norm = nn.LayerNorm(hidden_dim)
+        self.head = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, 1),
+        )
+        self.register_buffer("hemi_ids", parse_hemi(roi_names), persistent=False)
+        self.register_buffer("group_features", group_features.float(), persistent=False)
+        self.register_buffer("size_z", counts[:, None], persistent=False)
+
+    def forward(self, tokens: Tensor) -> tuple[Tensor, Tensor]:
+        bsz = tokens.shape[0]
+        kv = self.token_proj(tokens)
+        global_query = self.global_query.unsqueeze(0).expand(bsz, -1, -1)
+        global_token, _ = self.global_attn(global_query, kv, kv, need_weights=False)
+        global_token = self.global_norm(global_token + global_query)
+        kv_aug = torch.cat([kv, global_token], dim=1)
+        query = (
+            self.query
+            + self.hemi_embed(self.hemi_ids)
+            + self.group_proj(self.group_features)
+            + self.size_mlp(self.size_z)
+        )
+        query = query.unsqueeze(0).expand(bsz, -1, -1)
+        z_roi, _ = self.cross_attn(query, kv_aug, kv_aug, need_weights=False)
+        z_roi = self.norm(z_roi + query)
+        pred = self.head(z_roi).squeeze(-1)
+        return pred, z_roi
+
+
 class AtmSemanticSpatial(nn.Module):
     def __init__(
         self,
@@ -486,6 +600,22 @@ class AtmSemanticSpatial(nn.Module):
             elif spatial_head == "pooled":
                 self.roi_branch = PooledRoiBranch(
                     n_roi=len(roi_names),
+                    token_dim=atm_d_model,
+                    n_heads=atm_heads,
+                )
+            elif spatial_head == "query_pooled":
+                self.roi_branch = QueryPooledResidualBranch(
+                    roi_names,
+                    vertex_counts,
+                    group_features=group_features,
+                    token_dim=atm_d_model,
+                    n_heads=atm_heads,
+                )
+            elif spatial_head == "query_context":
+                self.roi_branch = OrderedRoiQueryContextBranch(
+                    roi_names,
+                    vertex_counts,
+                    group_features=group_features,
                     token_dim=atm_d_model,
                     n_heads=atm_heads,
                 )
@@ -831,7 +961,11 @@ def main() -> int:
     parser.add_argument("--atm-d-ff", type=int, default=256)
     parser.add_argument("--subject-mode", choices=["token", "none"], default="token")
     parser.add_argument("--semantic-head", choices=["shallow", "attn"], default="shallow")
-    parser.add_argument("--spatial-head", choices=["query", "pooled"], default="query")
+    parser.add_argument(
+        "--spatial-head",
+        choices=["query", "pooled", "query_pooled", "query_context"],
+        default="query",
+    )
     parser.add_argument("--roi-feature-mode", choices=["group", "coord", "group_coord"], default="group")
     parser.add_argument("--prototype-metadata-roi", type=Path, default=None)
     parser.add_argument("--device", default="cuda")

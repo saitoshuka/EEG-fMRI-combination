@@ -275,6 +275,26 @@ Relevant file:
 - `fmri_foundation_workspace/notes/eeg_image_bridge/atm_proto256_residual_query_vs_pooled_20260605.md`
 - `fmri_foundation_workspace/notes/eeg_image_bridge/atm_proto256_coordinate_query_20260605.md`
 
+### 8. Hybrid query pilot
+
+To address the pooled-vs-query scalar rank gap, two seed33 real-fMRI visual64
+hybrid heads were tested:
+
+| head | visual64 rank | shifted | ROI corr | identity diag-offdiag | decision |
+|---|---:|---:|---:|---:|---|
+| query | 0.7384 | 0.4838 | 0.1488 | 0.1315 | interpretable but lower scalar rank |
+| pooled | 0.7739 | 0.4836 | 0.0932 | 0.0896 | strongest scalar rank |
+| query_pooled | 0.7620 | 0.4809 | 0.0900 | 0.0882 | rank recovers, identity is diluted |
+| query_context | 0.7186 | 0.4839 | 0.1293 | 0.1109 | identity partly preserved, rank drops |
+
+Decision: do not continue simple pooled mixing or one-token global context. The
+next useful architecture should use dual-head supervision, hierarchical/local
+query constraints, or finer cortical targets.
+
+Relevant file:
+
+- `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_hybrid_query_pilots_20260605.md`
+
 ## Reproducibility Notes
 
 The local environment was managed with conda. The core EEG environment was

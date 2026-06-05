@@ -174,3 +174,12 @@ Current status after the real-fMRI and proto256 updates:
   cortical target"; it is whether the proposed query/spatial-prior architecture
   can beat strong pooled/semantic controls or provide sufficiently robust,
   confirmatory, neuroscience-aligned interpretability.
+- A seed33 hybrid pilot did not remove this blocker. `query_pooled` recovered
+  most scalar rank (0.7620 vs pooled 0.7739) but diluted identity to pooled-like
+  values; `query_context` preserved more identity but reduced rank. This argues
+  against more simple pooled mixing and for dual-head, hierarchical/local query,
+  or finer-target designs.
+
+Relevant file:
+
+- `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_hybrid_query_pilots_20260605.md`
