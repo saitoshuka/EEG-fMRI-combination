@@ -299,6 +299,29 @@ Relevant file:
 - `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_hybrid_query_pilots_20260605.md`
 - `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_dual_head_pilot_20260605.md`
 
+### 9. ROI-branch retrieval rerank check
+
+Because main-conference reviewers will usually prioritize hard metrics, an
+additional check tested whether exported ROI predictions can improve 200-image
+retrieval as a second-stage reranker over the semantic EEG->CLIP score.
+
+| exported model | target | baseline top1 | best rerank top1 | CV top1 gain | CV top5 gain | decision |
+|---|---|---:|---:|---:|---:|---|
+| proto256 query | residual k256 | 0.425 | 0.420 | -0.0025 | -0.0050 | no metric gain |
+| proto256 pooled | residual k256 | 0.405 | 0.410 | +0.0015 | +0.0065 | negligible |
+| parcel38 query | residual 38 | 0.430 | 0.450 | -0.0020 | -0.0005 | full-grid gain not CV-stable |
+| parcel38 pooled | raw strong 38 | 0.300 | 0.300 | -0.0040 | +0.0065 | no top1/rank gain |
+
+Decision: the ROI branches carry target signal, but simple post-hoc reranking
+of the current heads is not a stable main-metric route. The next metric-facing
+work should use stronger dual-head/local-query training or a generation-side
+comparison, rather than more small rerank-grid variants.
+
+Relevant file:
+
+- `fmri_foundation_workspace/notes/eeg_image_bridge/atm_roi_prediction_rerank_metric_check_20260605.md`
+- `fmri_foundation_workspace/scripts/rerank_atm_roi_predictions.py`
+
 ## Reproducibility Notes
 
 The local environment was managed with conda. The core EEG environment was
@@ -335,7 +358,7 @@ Do not claim yet:
 - EEG reconstructs true fMRI activity across arbitrary paired datasets.
 - The cortical maps are measured brain activation.
 - Ordered ROI queries improve scalar retrieval/rank over pooled heads.
-- The current 200-image test-set retrieval gain is definitive.
+- Current ROI-branch reranking gives a stable 200-image retrieval gain.
 
 Next evidence needed:
 

@@ -184,8 +184,15 @@ Current status after the real-fMRI and proto256 updates:
   (0.7652 / 0.2468 vs pooled 0.7739 / 0.2468), while the query output preserves
   stronger identity than pooled (0.1198 vs 0.0896). However, pooled remains best
   for scalar rank and original query remains best for identity.
+- A 200-image ROI-branch reranking check directly tested the metric route. The
+  current exported heads do not give stable retrieval gains: proto256 query
+  drops under split-CV, proto256 pooled is negligible, residual parcel38 has a
+  full-grid +0.020 top1 but the gain is not CV-stable, and raw strong parcel38
+  has no top1/rank gain. This keeps cortical grounding promising but confirms
+  that the present spatial branch is not yet an AAAI-grade performance booster.
 
 Relevant file:
 
 - `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_hybrid_query_pilots_20260605.md`
 - `fmri_foundation_workspace/notes/eeg_image_bridge/realfmri_visual64_dual_head_pilot_20260605.md`
+- `fmri_foundation_workspace/notes/eeg_image_bridge/atm_roi_prediction_rerank_metric_check_20260605.md`
