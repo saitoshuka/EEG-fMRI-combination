@@ -131,13 +131,17 @@ Relevant files:
 - `fmri_foundation_workspace/notes/eeg_image_bridge/proto256_pooled_realfmri_probe_integrity_audit_20260605.md`
 - `fmri_foundation_workspace/notes/eeg_image_bridge/proto256_pooled_realfmri_checkpoint_control_20260605.md`
 - `fmri_foundation_workspace/notes/eeg_image_bridge/proto256_pooled_clip_fusion_20260605.md`
+- `fmri_foundation_workspace/notes/eeg_image_bridge/semantic_only_vs_proto256_fusion_20260605.md`
 - `fmri_foundation_workspace/results/eeg_image_bridge/things_fmri_external_validation/atm_feature_to_realfmri_probe/multiseed_summary/pooled_proto256_residual_realfmri_multiseed.md`
 - `fmri_foundation_workspace/results/eeg_image_bridge/things_fmri_external_validation/atm_feature_to_realfmri_probe/multiseed_summary/proto256_pooled_realfmri_checkpoint_ci.md`
 - `fmri_foundation_workspace/results/eeg_image_bridge/atm_learned_fusion/proto256_pooled_clip_fusion/summary.md`
+- `fmri_foundation_workspace/results/eeg_image_bridge/atm_semantic_only_retrieval/semantic_only_model/summary.md`
 - `fmri_foundation_workspace/scripts/build_things_fmri_atm_shared_roi_targets.py`
 - `fmri_foundation_workspace/scripts/run_atm_proto256_pooled_final_realfmri_probe.sh`
 - `fmri_foundation_workspace/scripts/bootstrap_atm_proto256_realfmri_probe_ci.py`
 - `fmri_foundation_workspace/scripts/evaluate_atm_proto256_clip_fusion.py`
+- `fmri_foundation_workspace/scripts/run_atm_semantic_only_export.sh`
+- `fmri_foundation_workspace/scripts/evaluate_atm_semantic_only_clip_retrieval.py`
 - `fmri_foundation_workspace/scripts/run_atm_real_fmri_shared_roi207.sh`
 - `fmri_foundation_workspace/scripts/evaluate_atm_real_fmri_roi_runs.py`
 - `fmri_foundation_workspace/scripts/summarize_atm_real_fmri_visual64_multiseed.py`
